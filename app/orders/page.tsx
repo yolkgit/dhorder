@@ -1,0 +1,610 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
+import { toast } from 'sonner';
+import { Edit, Trash2, Eye, Calendar, Truck } from 'lucide-react';
+import Link from 'next/link';
+import { CalendarIcon, ListIcon, PlusIcon } from 'lucide-react';
+import { FilterIcon } from 'lucide-react';
+
+// 주문 상태 표시 컴포넌트
+const OrderStatusBadge = ({ status, isAdmin, orderId, onStatusChange }: { status: string; isAdmin: boolean; orderId: string; onStatusChange?: (id: string, status: string) => void }) => {
+  // 상태별 색상 및 스타일 설정
+  let iconColor = 'text-gray-500';
+  let bgColor = 'bg-gray-100';
+  let hoverClass = '';
+  
+  if (status === 'RECEIVED') {
+    iconColor = 'text-gray-500';
+    bgColor = 'bg-gray-100';
+  } else if (status === 'DISPATCHED') {
+    iconColor = 'text-blue-500';
+    bgColor = 'bg-blue-100';
+  } else if (status === 'DELIVERED') {
+    iconColor = 'text-red-500';
+    bgColor = 'bg-red-100';
+  }
+
+  // 관리자인 경우 호버 효과 및 커서 스타일 추가
+  if (isAdmin) {
+    hoverClass = 'hover:scale-110 cursor-pointer transition-transform';
+  }
+
+  // 관리자 클릭 핸들러
+  const handleClick = () => {
+    if (isAdmin && onStatusChange) {
+      // 상태 순환: RECEIVED -> DISPATCHED -> DELIVERED -> RECEIVED
+      const nextStatus = {
+        'RECEIVED': 'DISPATCHED',
+        'DISPATCHED': 'DELIVERED',
+        'DELIVERED': 'RECEIVED'
+      }[status] || 'RECEIVED';
+      
+      onStatusChange(orderId, nextStatus);
+    }
+  };
+
+  // 상태 텍스트 (툴팁용)
+  const statusText = {
+    RECEIVED: '주문접수',
+    DISPATCHED: '차량배차',
+    DELIVERED: '배송완료',
+  }[status] || status;
+
+  return (
+    <div 
+      className={`flex justify-center items-center p-1.5 rounded-full ${bgColor} ${hoverClass}`} 
+      title={statusText} 
+      onClick={handleClick}
+    >
+      <Truck className={`h-5 w-5 ${iconColor}`} />
+    </div>
+  );
+};
+
+// 주문 항목 목록 컴포넌트
+const OrderItemsList = ({ items }: { items: any[] }) => {
+  return (
+    <ul className="list-none p-0 m-0">
+      {items.map((item, index) => (
+        <li key={index} className="mb-0.5">
+          {item.itemName}
+        </li>
+      ))}
+    </ul>
+  );
+};
+
+// 주문 상세 정보 다이얼로그 컴포넌트
+const OrderDetailsDialog = ({ order, onDelete, isObserver }: { order: any, onDelete: (id: string) => Promise<void>, isObserver: boolean }) => {
+  // 주문 생성 시간을 초까지 포맷팅하는 함수
+  const formatCreatedAt = (dateString: string) => {
+    if (!dateString) return '정보 없음';
+    const date = new Date(dateString);
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}:${String(date.getSeconds()).padStart(2, '0')}`;
+  };
+
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <Button variant="ghost" size="icon" className="px-0 mx-0">
+          <Eye className="h-4 w-4" />
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>주문 상세 정보</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 mt-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="col-span-2">
+              <p className="text-sm font-medium text-gray-500">주문일시</p>
+              <p>{formatCreatedAt(order.createdAt)}</p>
+            </div>
+            
+            <div>
+              <p className="text-sm font-medium text-gray-500">상태</p>
+              <div className="flex items-center mt-1">
+                <OrderStatusBadge status={order.status} isAdmin={false} orderId={order.id} />
+                <span className="ml-2">
+                  {order.status === 'RECEIVED' ? '주문접수' : 
+                   order.status === 'DISPATCHED' ? '차량배차' : 
+                   order.status === 'DELIVERED' ? '배송완료' : order.status}
+                </span>
+              </div>
+            </div>
+            
+            <div>
+              <p className="text-sm font-medium text-gray-500">납품일자</p>
+              <p>{new Date(order.deliveryDate).toLocaleDateString()}</p>
+            </div>
+            
+            <div>
+              <p className="text-sm font-medium text-gray-500">도착시간</p>
+              <p>{order.arrivalTime || '정보 없음'}</p>
+            </div>
+            
+            <div>
+              <p className="text-sm font-medium text-gray-500">하차지</p>
+              <p>{order.destination || '정보 없음'}</p>
+            </div>
+            
+            <div>
+              <p className="text-sm font-medium text-gray-500">전화번호</p>
+              <p>{order.phoneNumber || '정보 없음'}</p>
+            </div>
+            
+            <div className="col-span-2">
+              <p className="text-sm font-medium text-gray-500">주소</p>
+              <p>{order.address || '정보 없음'}</p>
+            </div>
+            
+            {order.memo && (
+              <div className="col-span-2">
+                <p className="text-sm font-medium text-gray-500">메모</p>
+                <p>{order.memo}</p>
+              </div>
+            )}
+            
+            <div className="col-span-2">
+              <p className="text-sm font-medium text-gray-500 mb-2">주문 항목</p>
+              <div className="border rounded-md p-3 bg-gray-50">
+                {order.orderItems && Array.isArray(order.orderItems) && order.orderItems.length > 0 ? (
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="text-left pb-2 font-medium">품목</th>
+                        <th className="text-right pb-2 font-medium">수량</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {order.orderItems.map((item: any, idx: number) => (
+                        <tr key={idx} className={idx !== order.orderItems.length - 1 ? "border-b" : ""}>
+                          <td className="py-2">{item.itemName}</td>
+                          <td className="py-2 text-right font-medium">{item.quantity}개</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : (
+                  <p className="text-sm text-gray-500">주문 항목이 없습니다.</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+        <DialogFooter className="mt-4 flex justify-between">
+          <div className="flex gap-2">
+            {order.status === 'RECEIVED' && (
+              <>
+                <Button variant="outline" size="sm" asChild>
+                  <Link href={`/orders/${order.id}/edit`} className="flex items-center">
+                    <Edit className="h-4 w-4 mr-1" />
+                    수정
+                  </Link>
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => onDelete(order.id)}
+                  className="flex items-center"
+                >
+                  <Trash2 className="h-4 w-4 mr-1" />
+                  삭제
+                </Button>
+              </>
+            )}
+          </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+export default function OrdersPage() {
+  const router = useRouter();
+  const { data: session, status } = useSession();
+  const [orders, setOrders] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [selectedMonth, setSelectedMonth] = useState<string>(
+    new Date().toISOString().slice(0, 7) // YYYY-MM 형식으로 현재 월 설정
+  );
+  const [showAllOrders, setShowAllOrders] = useState(false);
+
+  // 주문 목록 불러오기
+  const fetchOrders = async (month?: string, showAll: boolean = false) => {
+    setIsLoading(true);
+    try {
+      // 모든 주문을 보여주는 경우 월 필터를 적용하지 않음
+      const queryParams = showAll ? '' : (month ? `?month=${month}` : '');
+      
+      // 캐시 방지를 위한 타임스탬프 추가
+      const timestamp = new Date().getTime();
+      const url = `/api/orders${queryParams}${queryParams ? '&' : '?'}t=${timestamp}`;
+      
+      const response = await fetch(url, {
+        // 캐시를 사용하지 않도록 설정
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`주문 목록을 불러오는데 실패했습니다. 상태 코드: ${response.status}`);
+      }
+      
+      const responseText = await response.text();
+      
+      if (!responseText || responseText.trim() === '') {
+        setOrders([]);
+        toast.warning('서버에서 빈 응답을 받았습니다.');
+        return;
+      }
+      
+      try {
+        const data = JSON.parse(responseText);
+        
+        // 응답 형식 확인 및 처리
+        if (data && data.orders && Array.isArray(data.orders)) {
+          setOrders(data.orders);
+        } else if (Array.isArray(data)) {
+          setOrders(data);
+        } else {
+          setOrders([]);
+          toast.error('서버 응답 형식이 올바르지 않습니다.');
+        }
+      } catch (parseError) {
+        toast.error('서버 응답을 처리하는데 실패했습니다.');
+        setOrders([]);
+      }
+    } catch (error: any) {
+      toast.error(error.message || '주문 목록을 불러오는데 실패했습니다.');
+      setOrders([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // 월 변경 핸들러
+  const handleMonthChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newMonth = e.target.value;
+    setSelectedMonth(newMonth);
+    fetchOrders(newMonth, showAllOrders);
+  };
+
+  // 주문 삭제 핸들러
+  const handleDeleteOrder = async (orderId: string) => {
+    if (!confirm('정말로 이 주문을 삭제하시겠습니까?')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/orders/${orderId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || '주문 삭제 중 오류가 발생했습니다.');
+      }
+
+      toast.success('주문이 삭제되었습니다.');
+      fetchOrders(selectedMonth);
+    } catch (error) {
+      if (error instanceof Error) {
+        toast.error(error.message);
+      } else {
+        toast.error('주문 삭제 중 오류가 발생했습니다.');
+      }
+    }
+  };
+
+  // 주문 상태 변경 핸들러 (관리자용)
+  const handleChangeStatus = async (orderId: string, newStatus: string) => {
+    try {
+      toast.loading('상태 변경 중...');
+      
+      const response = await fetch(`/api/orders/${orderId}/status`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status: newStatus }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || '상태 변경 중 오류가 발생했습니다.');
+      }
+
+      toast.dismiss();
+      toast.success('주문 상태가 변경되었습니다.');
+      fetchOrders(selectedMonth, showAllOrders);
+    } catch (error) {
+      toast.dismiss();
+      if (error instanceof Error) {
+        toast.error(error.message);
+      } else {
+        toast.error('상태 변경 중 오류가 발생했습니다.');
+      }
+    }
+  };
+
+  // 전체 주문 보기 토글 핸들러
+  const handleToggleAllOrders = () => {
+    setShowAllOrders(!showAllOrders);
+    fetchOrders(selectedMonth, !showAllOrders);
+  };
+
+  // 초기 데이터 로드
+  useEffect(() => {
+    if (status === 'authenticated') {
+      // 기본적으로 전체 주문을 보여주도록 설정
+      setShowAllOrders(true);
+      fetchOrders(selectedMonth, true);
+    } else if (status === 'unauthenticated') {
+      // 인증되지 않은 경우 로그인 페이지로 리디렉션
+      router.push('/login');
+    }
+  }, [status, selectedMonth, router]);
+
+  // 로딩 상태 표시
+  if (status === 'loading') {
+    return <div>로딩 중...</div>;
+  }
+
+  // 오늘 및 이후 날짜의 주문만 필터링
+  const today = new Date();
+  today.setHours(0, 0, 0, 0); // 오늘 자정으로 설정
+  
+  const currentAndFutureOrders = orders.filter(order => {
+    const deliveryDate = new Date(order.deliveryDate);
+    deliveryDate.setHours(0, 0, 0, 0); // 배송일 자정으로 설정
+    
+    // 오늘 날짜와 같거나 이후인 주문만 필터링
+    return deliveryDate.getTime() >= today.getTime();
+  });
+
+  // 필터링된 주문 목록 (월 선택 및 모든 주문 보기 토글에 따라 변경)
+  const filteredOrders = showAllOrders ? orders : orders.filter(order => {
+    const orderDate = new Date(order.deliveryDate);
+    const orderMonth = `${orderDate.getFullYear()}-${String(orderDate.getMonth() + 1).padStart(2, '0')}`;
+    return orderMonth === selectedMonth;
+  });
+
+  return (
+    <div className="container mx-auto py-6 px-4 sm:px-6 lg:px-8">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4">
+        <h1 className="text-2xl font-bold text-gray-900 mb-2 md:mb-0">주문 관리</h1>
+      </div>
+
+      {/* 오늘 이후 주문 목록 */}
+      <Card className="mb-4">
+        <CardHeader className="py-2">
+          <CardTitle className="text-base flex items-center">
+            <Calendar className="mr-1.5 h-4 w-4" />
+            금일 주문 상태
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          {isLoading ? (
+            <div className="py-4 text-center">주문 목록을 불러오는 중...</div>
+          ) : currentAndFutureOrders.length === 0 ? (
+            <div className="py-4 text-center">주문이 없습니다.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table className="w-full border-collapse">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-12 text-center py-0.5 px-0.5">번호</TableHead>
+                    <TableHead className="w-24 text-center py-0.5 px-0.5">배차상태</TableHead>
+                    <TableHead className="w-28 text-center py-0.5 px-0.5">납품일자</TableHead>
+                    <TableHead className="w-28 text-center py-0.5 px-0.5">지점명</TableHead>
+                    <TableHead className="w-28 text-center py-0.5 px-0.5">하차지</TableHead>
+                    <TableHead className="w-32 text-center py-0.5 px-0.5">메모</TableHead>
+                    <TableHead className="w-32 text-center py-0.5 px-0.5">품목</TableHead>
+                    <TableHead className="w-20 text-center py-0.5 px-0.5">수량</TableHead>
+                    <TableHead className="w-20 text-center py-0.5 px-0.5">관리</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {currentAndFutureOrders.map((order, index) => (
+                    <TableRow key={order.id} className="h-10">
+                      <TableCell className="font-medium text-center py-0.5 px-0.5">{index + 1}</TableCell>
+                      <TableCell className="text-center py-0.5 px-0.5">
+                        <OrderStatusBadge 
+                          status={order.status} 
+                          isAdmin={session?.user?.role === 'ADMIN'} 
+                          orderId={order.id}
+                          onStatusChange={handleChangeStatus}
+                        />
+                      </TableCell>
+                      <TableCell className="text-center py-0.5 px-0.5">{new Date(order.deliveryDate).toLocaleDateString()}</TableCell>
+                      <TableCell className="text-center py-0.5 px-0.5">{order.user?.branchName || order.user?.name || '정보 없음'}</TableCell>
+                      <TableCell className="text-center py-0.5 px-0.5">{order.destination}</TableCell>
+                      <TableCell className="max-w-[150px] truncate text-center py-0.5 px-0.5">{order.memo}</TableCell>
+                      <TableCell className="text-center py-0.5 px-0.5">
+                        {order.orderItems && Array.isArray(order.orderItems) ? (
+                          <OrderItemsList items={order.orderItems} />
+                        ) : (
+                          <span className="text-red-500">항목 없음</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-center py-0.5 px-0.5">
+                        {order.orderItems && Array.isArray(order.orderItems) 
+                          ? order.orderItems.map((item: any, idx: number) => (
+                              <div key={idx} className="mb-0.5">
+                                {item.quantity || 0}
+                              </div>
+                            ))
+                          : 0}
+                      </TableCell>
+                      <TableCell className="text-center py-0.5 px-0.5">
+                        <div className="flex justify-center">
+                          <OrderDetailsDialog 
+                            order={order} 
+                            onDelete={handleDeleteOrder} 
+                            isObserver={session?.user?.role === 'OBSERVER'}
+                          />
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* 전체 주문 목록 */}
+      <Card className="mb-4">
+        <CardHeader className="py-2">
+          <div className="flex justify-between items-center">
+            <CardTitle className="text-base flex items-center">
+              <ListIcon className="mr-1.5 h-4 w-4" />
+              {showAllOrders ? '모든 주문' : `${selectedMonth.slice(0, 4)}년 ${selectedMonth.slice(5, 7)}월 주문`}
+            </CardTitle>
+            
+            {/* 헤더 오른쪽에 월 선택 UI와 버튼 배치 - 아이콘화 */}
+            {session?.user?.role !== 'OBSERVER' && (
+              <div className="flex items-center gap-2">
+                <div className="relative">
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="relative w-8 h-8 rounded-full"
+                    onClick={() => {
+                      const monthInput = document.getElementById('month-selector') as HTMLInputElement;
+                      if (monthInput) monthInput.showPicker();
+                    }}
+                  >
+                    <CalendarIcon className="h-4 w-4" />
+                    <span className="sr-only">월 선택</span>
+                  </Button>
+                  <Input
+                    id="month-selector"
+                    type="month"
+                    value={selectedMonth}
+                    onChange={handleMonthChange}
+                    className="opacity-0 absolute w-0 h-0 pointer-events-none"
+                    aria-label="월 선택"
+                  />
+                  <span className="hidden md:inline-block ml-2 text-sm text-gray-500">
+                    {selectedMonth.slice(0, 4)}년 {selectedMonth.slice(5, 7)}월
+                  </span>
+                </div>
+                
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={handleToggleAllOrders}
+                  className="relative w-8 h-8 rounded-full"
+                  title={showAllOrders ? '월별 주문 보기' : '모든 주문 보기'}
+                >
+                  <FilterIcon className="h-4 w-4" />
+                  <span className="sr-only">{showAllOrders ? '월별 주문 보기' : '모든 주문 보기'}</span>
+                </Button>
+                <span className="hidden md:inline-block text-sm text-gray-500">
+                  {showAllOrders ? '월별 주문 보기' : '모든 주문 보기'}
+                </span>
+              </div>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          {isLoading ? (
+            <div className="py-4 text-center">주문 목록을 불러오는 중...</div>
+          ) : orders.length === 0 ? (
+            <div className="py-4 text-center">주문이 없습니다.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table className="w-full border-collapse">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-12 text-center py-0.5 px-0.5">번호</TableHead>
+                    <TableHead className="w-24 text-center py-0.5 px-0.5">배차상태</TableHead>
+                    <TableHead className="w-28 text-center py-0.5 px-0.5">납품일자</TableHead>
+                    <TableHead className="w-28 text-center py-0.5 px-0.5">지점명</TableHead>
+                    <TableHead className="w-28 text-center py-0.5 px-0.5">하차지</TableHead>
+                    <TableHead className="w-32 text-center py-0.5 px-0.5">메모</TableHead>
+                    <TableHead className="w-32 text-center py-0.5 px-0.5">품목</TableHead>
+                    <TableHead className="w-20 text-center py-0.5 px-0.5">수량</TableHead>
+                    <TableHead className="w-20 text-center py-0.5 px-0.5">관리</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {orders.map((order, index) => (
+                    <TableRow key={order.id} className="h-10">
+                      <TableCell className="font-medium text-center py-0.5 px-0.5">{index + 1}</TableCell>
+                      <TableCell className="text-center py-0.5 px-0.5">
+                            <OrderStatusBadge 
+                              status={order.status} 
+                              isAdmin={session?.user?.role === 'ADMIN'} 
+                              orderId={order.id}
+                              onStatusChange={handleChangeStatus}
+                            />
+                          </TableCell>
+                      <TableCell className="text-center py-0.5 px-0.5">{new Date(order.deliveryDate).toLocaleDateString()}</TableCell>
+                      <TableCell className="text-center py-0.5 px-0.5">{order.user?.branchName || order.user?.name || '정보 없음'}</TableCell>
+                      <TableCell className="text-center py-0.5 px-0.5">{order.destination}</TableCell>
+                      <TableCell className="max-w-[150px] truncate text-center py-0.5 px-0.5">{order.memo}</TableCell>
+                      <TableCell className="text-center py-0.5 px-0.5">
+                            {order.orderItems && Array.isArray(order.orderItems) ? (
+                              <OrderItemsList items={order.orderItems} />
+                            ) : (
+                              <span className="text-red-500">항목 없음</span>
+                            )}
+                          </TableCell>
+                      <TableCell className="text-center py-0.5 px-0.5">
+                            {order.orderItems && Array.isArray(order.orderItems) 
+                              ? order.orderItems.map((item: any, idx: number) => (
+                              <div key={idx} className="mb-0.5">
+                                    {item.quantity || 0}
+                                  </div>
+                                ))
+                              : 0}
+                          </TableCell>
+                      <TableCell className="text-center py-0.5 px-0.5">
+                        <div className="flex justify-center">
+                          <OrderDetailsDialog 
+                            order={order} 
+                            onDelete={handleDeleteOrder} 
+                            isObserver={session?.user?.role === 'OBSERVER'}
+                          />
+                            </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+      
+      {/* 새 주문 버튼 - 고정 위치 */}
+      {session?.user?.role !== 'OBSERVER' && (
+        <div className="fixed bottom-6 right-6 z-10">
+          <Link 
+            href="/orders/new" 
+            className="flex items-center justify-center bg-green-500 hover:bg-green-600 text-white rounded-full w-16 h-16 shadow-lg transition-colors duration-200"
+          >
+            <PlusIcon className="h-8 w-8" />
+          </Link>
+        </div>
+      )}
+    </div>
+  );
+} 
+
