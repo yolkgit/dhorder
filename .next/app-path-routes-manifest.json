@@ -1,0 +1,20 @@
+{
+  "/_not-found/page": "/_not-found",
+  "/api/items/route": "/api/items",
+  "/api/orders/[id]/route": "/api/orders/[id]",
+  "/api/orders/[id]/status/route": "/api/orders/[id]/status",
+  "/api/orders/route": "/api/orders",
+  "/api/register/route": "/api/register",
+  "/api/telegram/test/route": "/api/telegram/test",
+  "/api/users/route": "/api/users",
+  "/favicon.ico/route": "/favicon.ico",
+  "/api/auth/[...nextauth]/route": "/api/auth/[...nextauth]",
+  "/admin/page": "/admin",
+  "/orders/[id]/page": "/orders/[id]",
+  "/login/page": "/login",
+  "/page": "/",
+  "/orders/page": "/orders",
+  "/orders/new/page": "/orders/new",
+  "/register/page": "/register",
+  "/orders/[id]/edit/page": "/orders/[id]/edit"
+}
