@@ -37,7 +37,7 @@ export default function NewOrderPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [items, setItems] = useState<{ id: string; name: string; description: string | null }[]>([]);
   const [isItemsLoading, setIsItemsLoading] = useState(true);
-  
+
   // 하차지 자동완성을 위한 상태
   const [destinationOptions, setDestinationOptions] = useState<DestinationOption[]>([]);
   const [showDestinationOptions, setShowDestinationOptions] = useState(false);
@@ -154,39 +154,51 @@ export default function NewOrderPage() {
     // 빈 문자열이면 그대로 반환
     if (!numbers) return '';
     
-    // 전화번호 형식에 따라 포맷팅
-    if (numbers.length <= 3) {
-      // 3자리 이하: 그대로 반환
-      return numbers;
-    } else if (numbers.length <= 7) {
-      // 4-7자리: 지역번호 또는 휴대폰 앞자리 분리
-      // 예: 02-1234 또는 010-1234
-      const part1 = numbers.substring(0, 3);
-      const part2 = numbers.substring(3);
-      return `${part1}-${part2}`;
-    } else if (numbers.length <= 11) {
-      // 8-11자리: 일반적인 전화번호 형식
-      // 지역번호가 2자리인 경우 (02로 시작하는 서울 지역번호)
-      if (numbers.startsWith('02') && numbers.length <= 10) {
-        const part1 = numbers.substring(0, 2);
-        const part2 = numbers.substring(2, 6);
-        const part3 = numbers.substring(6);
-        return `${part1}-${part2}-${part3}`;
+    // 전화번호 길이가 11자리를 초과하면 11자리로 제한
+    const limitedNumbers = numbers.length > 11 ? numbers.substring(0, 11) : numbers;
+    
+    // 3자리 이하는 그대로 반환
+    if (limitedNumbers.length <= 3) {
+      return limitedNumbers;
+    }
+    
+    // 02로 시작하는 서울 지역번호
+    if (limitedNumbers.startsWith('02')) {
+      // 02-123-1234 형식 (7자리 번호)
+      if (limitedNumbers.length <= 7) {
+        const part1 = limitedNumbers.substring(0, 2);
+        const part2 = limitedNumbers.substring(2, 5);
+        const part3 = limitedNumbers.substring(5);
+        return part3 ? `${part1}-${part2}-${part3}` : `${part1}-${part2}`;
       }
-      // 지역번호가 3자리인 경우 (031, 032 등) 또는 휴대폰 번호 (010, 011 등)
+      // 02-1234-1234 형식 (8자리 번호)
       else {
-        const part1 = numbers.substring(0, 3);
-        const part2 = numbers.substring(3, 7);
-        const part3 = numbers.substring(7);
-        return `${part1}-${part2}-${part3}`;
+        const part1 = limitedNumbers.substring(0, 2);
+        const part2 = limitedNumbers.substring(2, 6);
+        const part3 = limitedNumbers.substring(6);
+        return part3 ? `${part1}-${part2}-${part3}` : `${part1}-${part2}`;
       }
-    } else {
-      // 11자리 초과: 앞에서부터 11자리만 사용하고 포맷팅
-      const truncated = numbers.substring(0, 11);
-      const part1 = truncated.substring(0, 3);
-      const part2 = truncated.substring(3, 7);
-      const part3 = truncated.substring(7);
-      return `${part1}-${part2}-${part3}`;
+    }
+    
+    // 3자리 지역번호 (010, 031, 041, 043 등)
+    else {
+      // 입력 중일 때 (xxx-xxxx 형식)
+      if (limitedNumbers.length > 3 && limitedNumbers.length <= 7) {
+        const part1 = limitedNumbers.substring(0, 3);
+        const part2 = limitedNumbers.substring(3);
+        return `${part1}-${part2}`;
+      }
+      // 완성된 번호 (xxx-xxxx-xxxx 형식)
+      else if (limitedNumbers.length > 7) {
+        const part1 = limitedNumbers.substring(0, 3);
+        const part2 = limitedNumbers.substring(3, 7);
+        const part3 = limitedNumbers.substring(7);
+        return part3 ? `${part1}-${part2}-${part3}` : `${part1}-${part2}`;
+      }
+      // 기타 경우
+      else {
+        return limitedNumbers;
+      }
     }
   }, []);
 
@@ -211,7 +223,7 @@ export default function NewOrderPage() {
     if (name === 'phoneNumber') {
       setOrderData((prev) => ({ ...prev, [name]: formatPhoneNumber(value) }));
     } else {
-      setOrderData((prev) => ({ ...prev, [name]: value }));
+    setOrderData((prev) => ({ ...prev, [name]: value }));
     }
     
     // 하차지 입력 시 자동완성 데이터 검색
@@ -315,7 +327,7 @@ export default function NewOrderPage() {
   const handleItemChange = useCallback((index: number, field: string, value: any) => {
     setOrderItems(prevItems => {
       const updatedItems = [...prevItems];
-      (updatedItems[index] as any)[field] = value;
+    (updatedItems[index] as any)[field] = value;
       return updatedItems;
     });
   }, []);
@@ -335,8 +347,8 @@ export default function NewOrderPage() {
     setOrderItems(prevItems => {
       if (prevItems.length > 1) {
         return prevItems.filter((_, i) => i !== index);
-      } else {
-        toast.error('최소 하나의 품목이 필요합니다.');
+    } else {
+      toast.error('최소 하나의 품목이 필요합니다.');
         return prevItems;
       }
     });
@@ -663,14 +675,14 @@ export default function NewOrderPage() {
                     기본 주소 *
                   </label>
                   <div className="flex gap-2">
-                    <Input
-                      id="address"
-                      name="address"
-                      type="text"
+                  <Input
+                    id="address"
+                    name="address"
+                    type="text"
                       placeholder="도로명 주소 검색"
-                      value={orderData.address}
-                      onChange={handleChange}
-                      required
+                    value={orderData.address}
+                    onChange={handleChange}
+                    required
                       className="flex-1"
                       readOnly={true}
                     />

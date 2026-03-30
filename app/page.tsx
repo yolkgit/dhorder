@@ -11,10 +11,12 @@ export default function Home() {
   useEffect(() => {
     if (status === 'loading') return;
     
-    if (status === 'unauthenticated') {
-      router.push('/login');
-    } else {
+    if (status === 'authenticated') {
+      // 로그인된 사용자는 주문 목록 페이지로 이동
       router.push('/orders');
+    } else {
+      // 로그인하지 않은 사용자는 로그인 페이지로 이동
+      router.push('/login');
     }
   }, [status, router]);
 

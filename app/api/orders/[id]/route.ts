@@ -133,7 +133,52 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
       );
     }
 
-    // 주문 상태 확인 - 완료 또는 취소된 주문은 수정 불가
+    // 🔥 주문 수정 직전 최신 상태 재확인 (실시간 체크)
+    const currentOrder = await prisma.order.findUnique({
+      where: { id: orderId },
+      select: { 
+        id: true, 
+        status: true, 
+        updatedAt: true,
+        user: {
+          select: {
+            name: true,
+            branchName: true
+          }
+        }
+      },
+    });
+
+    if (!currentOrder) {
+      console.log('주문 수정 - 주문 없음 (재확인):', orderId);
+      return NextResponse.json(
+        { error: '주문을 찾을 수 없습니다.' },
+        { status: 404 }
+      );
+    }
+
+    // 🔥 배차 또는 배송완료 상태 체크 (실시간)
+    if (['DISPATCHED', 'DELIVERED'].includes(currentOrder.status)) {
+      console.log('주문 수정 - 수정 불가 상태 (실시간 체크):', {
+        orderId,
+        currentStatus: currentOrder.status,
+        updatedAt: currentOrder.updatedAt
+      });
+      
+      const statusText = currentOrder.status === 'DISPATCHED' ? '배차 처리' : '배송 완료';
+      
+      return NextResponse.json(
+        { 
+          error: `이 주문은 이미 ${statusText}되어 수정할 수 없습니다.`,
+          currentStatus: currentOrder.status,
+          statusChanged: true, // 프론트엔드에서 상태 변경을 감지할 수 있도록
+          updatedAt: currentOrder.updatedAt
+        },
+        { status: 400 }
+      );
+    }
+
+    // 주문 상태 확인 - 완료 또는 취소된 주문은 수정 불가 (기존 로직 유지)
     if (['DELIVERED'].includes(existingOrder.status)) {
       console.log('주문 수정 - 수정 불가 상태:', existingOrder.status);
       return NextResponse.json(
@@ -226,10 +271,18 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
 
     console.log('주문 수정 성공:', orderId);
 
-    // 텔레그램 알림 전송 (비동기로 처리하여 응답 지연 방지)
-    sendOrderUpdateNotification(updatedOrder).catch(error => {
-      console.error('텔레그램 알림 전송 실패:', error);
-    });
+    // 🔥 텔레그램 알림 전송 (개선된 에러 처리)
+    try {
+      console.log(`[주문수정] 텔레그램 알림 전송 시작 - 주문 ID: ${orderId}`);
+      await sendOrderUpdateNotification(updatedOrder);
+      console.log(`[주문수정] 텔레그램 알림 전송 처리 완료 - 주문 ID: ${orderId}`);
+    } catch (telegramError) {
+      // 텔레그램 알림 실패는 주문 수정 성공에 영향을 주지 않음
+      console.error(`[주문수정] 텔레그램 알림 전송 실패 - 주문 ID: ${orderId}:`, {
+        error: telegramError instanceof Error ? telegramError.message : String(telegramError),
+        stack: telegramError instanceof Error ? telegramError.stack : undefined
+      });
+    }
 
     // 응답 데이터 구성
     return NextResponse.json({

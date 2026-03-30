@@ -85,6 +85,44 @@ export default function EditOrderPage() {
     }
   }, [session, status, orderId]);
 
+  // 🔥 주문 상태 주기적 체크
+  useEffect(() => {
+    if (!orderId || !orderData.status) return;
+
+    const checkOrderStatus = async () => {
+      try {
+        const response = await fetch(`/api/orders/${orderId}`);
+        if (response.ok) {
+          const data = await response.json();
+          const currentStatus = data.order?.status;
+          
+          // 상태가 변경되었고, 수정 불가 상태인 경우
+          if (currentStatus !== orderData.status && 
+              ['DISPATCHED', 'DELIVERED'].includes(currentStatus)) {
+            
+            const statusText = currentStatus === 'DISPATCHED' ? '배차 처리' : '배송 완료';
+            toast.warning(`이 주문이 ${statusText}되었습니다. 수정이 불가능합니다.`);
+            
+            // 상태 업데이트
+            setOrderData(prev => ({ ...prev, status: currentStatus }));
+            
+            // 1.5초 후 주문 목록으로 이동
+            setTimeout(() => {
+              router.push('/orders');
+            }, 1500);
+          }
+        }
+      } catch (error) {
+        console.error('주문 상태 체크 오류:', error);
+      }
+    };
+
+    // 30초마다 상태 체크
+    const statusCheckInterval = setInterval(checkOrderStatus, 30000);
+
+    return () => clearInterval(statusCheckInterval);
+  }, [orderId, orderData.status, router]);
+
   // 카카오 주소 검색 API 스크립트 로드
   useEffect(() => {
     const script = document.createElement('script');
@@ -392,6 +430,18 @@ export default function EditOrderPage() {
       const data = await response.json();
       
       if (!response.ok) {
+        // 🔥 상태 변경으로 인한 수정 불가 처리
+        if (data.statusChanged) {
+          toast.error(data.error);
+          toast.info('페이지를 새로고침하여 최신 상태를 확인합니다.');
+          
+          // 1초 후 페이지 새로고침
+          setTimeout(() => {
+            window.location.reload();
+          }, 1000);
+          return false;
+        }
+        
         if (data.action === 'relogin') {
           setSessionError(true);
           toast.error('세션이 만료되었습니다. 다시 로그인해주세요.');
@@ -487,7 +537,22 @@ export default function EditOrderPage() {
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">주문 수정</h1>
+          <div className="flex items-center gap-4">
+            <h1 className="text-2xl font-bold text-gray-900">주문 수정</h1>
+            {/* 🔥 주문 상태 표시 */}
+            {orderData.status && (
+              <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                orderData.status === 'RECEIVED' ? 'bg-blue-100 text-blue-800' :
+                orderData.status === 'DISPATCHED' ? 'bg-yellow-100 text-yellow-800' :
+                orderData.status === 'DELIVERED' ? 'bg-green-100 text-green-800' :
+                'bg-gray-100 text-gray-800'
+              }`}>
+                {orderData.status === 'RECEIVED' ? '주문접수' :
+                 orderData.status === 'DISPATCHED' ? '배차완료' :
+                 orderData.status === 'DELIVERED' ? '배송완료' : orderData.status}
+              </span>
+            )}
+          </div>
           <div className="flex gap-2">
             <Button variant="outline" asChild>
               <Link href="/orders">주문 목록으로 돌아가기</Link>
@@ -739,11 +804,38 @@ export default function EditOrderPage() {
             </Button>
             <Button 
               type="submit" 
-              disabled={isLoading}
+              disabled={isLoading || ['DISPATCHED', 'DELIVERED'].includes(orderData.status)}
+              className="w-auto"
             >
-              {isLoading ? '저장 중...' : '주문 저장'}
+              {isLoading ? '저장 중...' : 
+               ['DISPATCHED', 'DELIVERED'].includes(orderData.status) ? 
+               '수정 불가 (배송 처리됨)' : '주문 저장'}
             </Button>
           </div>
+
+          {/* 🔥 수정 불가 상태 알림 */}
+          {['DISPATCHED', 'DELIVERED'].includes(orderData.status) && (
+            <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-md">
+              <div className="flex items-center">
+                <div className="flex-shrink-0">
+                  <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <div className="ml-3">
+                  <h3 className="text-sm font-medium text-yellow-800">
+                    수정 불가 상태
+                  </h3>
+                  <div className="mt-1 text-sm text-yellow-700">
+                    <p>
+                      이 주문은 이미 {orderData.status === 'DISPATCHED' ? '배차 처리' : '배송 완료'}되어 수정할 수 없습니다.
+                      {orderData.status === 'DISPATCHED' && ' 배송이 진행 중입니다.'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </form>
       </div>
     </div>

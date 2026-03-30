@@ -35,6 +35,34 @@ const nextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
+  // API 경로 및 서버 측 캐싱 설정
+  experimental: {
+    serverActions: {
+      allowedOrigins: ['*'],
+    },
+  },
+  // 응답 캐싱 비활성화
+  headers: async () => {
+    return [
+      {
+        source: '/api/:path*',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'no-store, no-cache, must-revalidate, proxy-revalidate',
+          },
+          {
+            key: 'Pragma',
+            value: 'no-cache',
+          },
+          {
+            key: 'Expires',
+            value: '0',
+          },
+        ],
+      },
+    ];
+  },
 };
 
 module.exports = nextConfig;

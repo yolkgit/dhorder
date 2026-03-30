@@ -1,0 +1,230 @@
+# Order System - 주문 관리 시스템 커서룰
+
+## 프로젝트 개요
+- **프로젝트명**: Order System (주문 관리 시스템)
+- **기술 스택**: Next.js 15.2.1, React 19, TypeScript, Prisma, SQLite, NextAuth.js, Tailwind CSS
+- **아키텍처**: Next.js App Router 기반 풀스택 웹 애플리케이션
+- **주요 기능**: 회원제 주문 관리, 텔레그램 알림, 엑셀 내보내기, 실시간 주문 상태 관리
+
+## 프로젝트 구조
+
+### 디렉토리 구조
+```
+order-system/
+├── app/                    # Next.js App Router
+│   ├── api/               # API 라우트
+│   │   ├── auth/          # 인증 관련 API
+│   │   ├── orders/        # 주문 관리 API
+│   │   ├── items/         # 품목 관리 API
+│   │   ├── users/         # 사용자 관리 API
+│   │   ├── telegram/      # 텔레그램 알림 API
+│   │   └── register/      # 회원가입 API
+│   ├── admin/             # 관리자 페이지
+│   ├── orders/            # 주문 관련 페이지
+│   ├── login/             # 로그인 페이지
+│   ├── register/          # 회원가입 페이지
+│   ├── components/        # 페이지별 컴포넌트
+│   ├── hooks/             # 커스텀 훅
+│   ├── types/             # 타입 정의
+│   ├── layout.tsx         # 루트 레이아웃
+│   ├── page.tsx           # 홈페이지
+│   └── globals.css        # 전역 스타일
+├── components/            # 공통 컴포넌트
+│   ├── ui/               # UI 컴포넌트 (shadcn/ui)
+│   ├── orders/           # 주문 관련 컴포넌트
+│   ├── providers/        # Context Provider
+│   └── OrderStatusBadge.tsx
+├── lib/                  # 유틸리티 라이브러리
+│   ├── prisma.ts         # Prisma 클라이언트
+│   ├── telegram.ts       # 텔레그램 알림 유틸리티
+│   └── utils.ts          # 공통 유틸리티
+├── prisma/               # 데이터베이스
+│   ├── schema.prisma     # 데이터베이스 스키마
+│   ├── seed.ts           # 시드 데이터
+│   ├── dev.db            # SQLite 데이터베이스
+│   └── migrations/       # 마이그레이션 파일
+├── types/                # 전역 타입 정의
+├── hooks/                # 전역 커스텀 훅
+└── public/               # 정적 파일
+```
+
+## 데이터베이스 스키마
+
+### 주요 모델
+1. **User** - 사용자 (지점 관리자/시스템 관리자)
+   - id, name, email, password, role, branchName
+   - Role: ADMIN | BRANCH
+
+2. **Order** - 주문
+   - id, userId, deliveryDate, arrivalTime, destination, address, phoneNumber
+   - status: RECEIVED | DISPATCHED | DELIVERED
+   - memo, createdAt, updatedAt
+
+3. **OrderItem** - 주문 품목
+   - id, orderId, itemName, quantity
+
+4. **Item** - 품목 마스터
+   - id, name, description
+
+## 핵심 기능
+
+### 1. 인증 시스템
+- NextAuth.js 기반 세션 관리
+- 역할 기반 접근 제어 (ADMIN/BRANCH)
+- 커스텀 로그인/회원가입 페이지
+
+### 2. 주문 관리
+- 주문 생성, 수정, 삭제
+- 실시간 주문 상태 업데이트
+- 주문 목록 필터링 및 검색
+- 엑셀 내보내기 기능
+
+### 3. 텔레그램 알림
+- 새 주문 생성 시 자동 알림
+- 주문 상태 변경 시 알림
+- 재시도 로직 및 오류 처리
+
+### 4. UI/UX
+- Tailwind CSS + shadcn/ui 컴포넌트
+- 반응형 디자인
+- 다크/라이트 테마 지원
+- Toast 알림 (sonner)
+
+## 코딩 규칙 및 가이드라인
+
+### 1. 파일 명명 규칙
+- 컴포넌트: PascalCase (예: OrderStatusBadge.tsx)
+- 페이지: kebab-case 디렉토리 + page.tsx
+- API 라우트: kebab-case 디렉토리 + route.ts
+- 유틸리티: camelCase (예: telegram.ts)
+
+### 2. 컴포넌트 구조
+```typescript
+// 컴포넌트 예시 구조
+interface ComponentProps {
+  // props 타입 정의
+}
+
+export function ComponentName({ prop1, prop2 }: ComponentProps) {
+  // 상태 관리
+  // 이벤트 핸들러
+  // 렌더링
+  return (
+    <div className="tailwind-classes">
+      {/* JSX */}
+    </div>
+  );
+}
+```
+
+### 3. API 라우트 구조
+```typescript
+// app/api/[resource]/route.ts
+import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+
+export async function GET(request: NextRequest) {
+  try {
+    // 인증 확인
+    // 비즈니스 로직
+    // 응답 반환
+  } catch (error) {
+    // 에러 처리
+  }
+}
+```
+
+### 4. 데이터베이스 접근
+- Prisma 클라이언트 사용
+- lib/prisma.ts에서 단일 인스턴스 관리
+- 트랜잭션 사용 시 적절한 에러 처리
+
+### 5. 타입 안전성
+- 모든 함수와 컴포넌트에 타입 정의
+- Prisma 생성 타입 활용
+- Zod를 통한 런타임 검증
+
+### 6. 에러 처리
+- try-catch 블록 사용
+- 사용자 친화적 에러 메시지
+- 콘솔 로그를 통한 디버깅 정보
+
+### 7. 성능 최적화
+- React.memo 적절히 사용
+- 불필요한 리렌더링 방지
+- 이미지 최적화 (Next.js Image 컴포넌트)
+
+## 환경 변수
+
+### 필수 환경 변수
+```env
+DATABASE_URL="file:./dev.db"
+NEXTAUTH_SECRET="your-secret-key"
+NEXTAUTH_URL="http://localhost:3000"
+TELEGRAM_BOT_TOKEN="your-telegram-bot-token"
+TELEGRAM_CHAT_ID="your-telegram-chat-id"
+```
+
+## 개발 워크플로우
+
+### 1. 새 기능 개발
+1. 데이터베이스 스키마 변경 (필요시)
+2. API 라우트 구현
+3. 컴포넌트 개발
+4. 페이지 통합
+5. 테스트 및 검증
+
+### 2. 컴포넌트 개발
+- 재사용 가능한 컴포넌트는 components/ui/에 배치
+- 도메인 특화 컴포넌트는 해당 도메인 폴더에 배치
+- Props 인터페이스 명확히 정의
+
+### 3. 상태 관리
+- 로컬 상태: useState, useReducer
+- 서버 상태: fetch + useState 조합
+- 전역 상태: React Context (필요시)
+
+### 4. 스타일링
+- Tailwind CSS 유틸리티 클래스 우선 사용
+- 커스텀 CSS는 최소화
+- shadcn/ui 컴포넌트 적극 활용
+
+## 주의사항
+
+### 1. 보안
+- 모든 API 라우트에서 인증 확인
+- 사용자 입력 검증 (Zod 스키마 사용)
+- SQL 인젝션 방지 (Prisma 사용)
+
+### 2. 성능
+- 대용량 데이터 처리 시 페이지네이션 구현
+- 불필요한 데이터 로딩 방지
+- 이미지 최적화
+
+### 3. 사용자 경험
+- 로딩 상태 표시
+- 에러 상태 처리
+- 성공/실패 피드백 제공
+
+### 4. 코드 품질
+- ESLint 규칙 준수
+- TypeScript strict 모드 사용
+- 코드 중복 최소화 (DRY 원칙)
+
+## 배포 설정
+
+### Next.js 설정 특징
+- TypeScript/ESLint 빌드 오류 무시 설정
+- API 캐싱 비활성화
+- Node.js 모듈 fallback 설정
+- 서버 액션 허용 설정
+
+### 빌드 명령어
+```bash
+npm run build    # 프로덕션 빌드
+npm run start    # 프로덕션 서버 시작
+npm run dev      # 개발 서버 시작
+npm run seed     # 데이터베이스 시드
+```
+
+이 커서룰을 따라 개발하면 일관성 있고 유지보수 가능한 코드를 작성할 수 있습니다. 

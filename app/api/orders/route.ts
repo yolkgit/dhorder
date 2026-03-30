@@ -25,6 +25,9 @@ export async function POST(req: Request) {
         status: 401,
         headers: {
           'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
         }
       });
     }
@@ -303,10 +306,18 @@ export async function POST(req: Request) {
 
     console.log('주문 생성 성공:', order.id);
     
-    // 텔레그램 알림 전송 (비동기로 처리하여 응답 지연 방지)
-    sendNewOrderNotification(order).catch(error => {
-      console.error('텔레그램 알림 전송 실패:', error);
-    });
+    // 🔥 텔레그램 알림 전송 (개선된 에러 처리)
+    try {
+      console.log(`[주문생성] 텔레그램 알림 전송 시작 - 주문 ID: ${order.id}`);
+      await sendNewOrderNotification(order);
+      console.log(`[주문생성] 텔레그램 알림 전송 처리 완료 - 주문 ID: ${order.id}`);
+    } catch (telegramError) {
+      // 텔레그램 알림 실패는 주문 생성 성공에 영향을 주지 않음
+      console.error(`[주문생성] 텔레그램 알림 전송 실패 - 주문 ID: ${order.id}:`, {
+        error: telegramError instanceof Error ? telegramError.message : String(telegramError),
+        stack: telegramError instanceof Error ? telegramError.stack : undefined
+      });
+    }
     
     // 성공 응답
     const successResponse = JSON.stringify({
@@ -342,138 +353,138 @@ export async function POST(req: Request) {
 // 주문 목록 조회 API
 export async function GET(req: Request) {
   try {
+    // 요청 URL에서 검색 파라미터 추출
+    const url = new URL(req.url);
+    const month = url.searchParams.get('month');
+    const showAll = url.searchParams.get('showAll') === 'true';
+    const startDate = url.searchParams.get('startDate');
+    const timestamp = url.searchParams.get('t') || Date.now().toString();
+    
+    console.log(`주문 목록 조회 요청 파라미터 (${timestamp}): { month: ${month}, showAll: ${showAll}, startDate: ${startDate} }`);
+    
+    // 세션 확인 - 세션이 없어도 조회 가능하도록 변경
     const session = await getServerSession(authOptions);
-    console.log('주문 목록 조회 - 세션 정보:', JSON.stringify(session, null, 2));
-
-    // 인증 확인
-    if (!session || !session.user) {
-      console.log('주문 목록 조회 - 인증 실패');
-      return NextResponse.json(
-        { error: '인증이 필요합니다.' },
-        { status: 401 }
-      );
-    }
-
-    const { searchParams } = new URL(req.url);
-    const month = searchParams.get('month');
-    console.log('주문 목록 조회 - 요청 월:', month);
-
-    // 월별 필터링을 위한 조건 설정
-    let dateFilter = {};
+    
+    // 데이터베이스 조회 조건 설정
+    let whereCondition: any = {};
+    
+    // month 파라미터가 있는 경우 (YYYY-MM 형식)
     if (month) {
-      try {
-        // 월 형식 검증 (YYYY-MM)
-        if (!/^\d{4}-\d{2}$/.test(month)) {
-          console.error('주문 목록 조회 - 유효하지 않은 월 형식:', month);
-          return NextResponse.json(
-            { error: '유효하지 않은 월 형식입니다. YYYY-MM 형식이어야 합니다.' },
-            { status: 400 }
-          );
-        }
-        
-        // 월의 시작일과 마지막일 계산
-        const [year, monthNum] = month.split('-').map(num => parseInt(num));
-        
-        // 월의 첫날 (1일)
-        const startDate = new Date(year, monthNum - 1, 1);
-        startDate.setHours(0, 0, 0, 0);
-        
-        // 다음 달의 첫날 - 1밀리초 (현재 월의 마지막 날)
-        const endDate = new Date(year, monthNum, 0);
-        endDate.setHours(23, 59, 59, 999);
-
-        dateFilter = {
-          deliveryDate: {
-            gte: startDate,
-            lte: endDate,
-          },
-        };
-        console.log('주문 목록 조회 - 월별 필터:', JSON.stringify({
-          month: month,
-          startDate: startDate.toISOString(),
-          endDate: endDate.toISOString()
-        }, null, 2));
-      } catch (dateError) {
-        console.error('주문 목록 조회 - 월 파싱 오류:', dateError);
+      // month 형식 검증 (YYYY-MM)
+      if (!/^\d{4}-\d{2}$/.test(month)) {
         return NextResponse.json(
-          { error: '월 형식이 올바르지 않습니다.' },
-          { status: 400 }
+          { success: false, error: '월 형식이 올바르지 않습니다. YYYY-MM 형식이어야 합니다.' },
+          { 
+            status: 400,
+            headers: {
+              'Cache-Control': 'no-cache, no-store, must-revalidate',
+              'Pragma': 'no-cache',
+              'Expires': '0'
+            }
+          }
         );
       }
-    } else {
-      console.log('주문 목록 조회 - 월 필터 없음, 모든 주문 조회');
+      
+      // 시작일과 종료일 설정
+      let startMonth, endMonth;
+      
+      if (startDate) {
+        // startDate가 제공된 경우, 해당 날짜부터 조회
+        startMonth = new Date(startDate);
+      } else {
+        // startDate가 없으면 선택된 월의 첫날
+        startMonth = new Date(`${month}-01T00:00:00Z`);
+      }
+      
+      if (showAll) {
+        // 전체 보기 모드: 시작일 이후의 모든 주문 조회 (종료일 없음)
+        whereCondition.deliveryDate = {
+          gte: startMonth
+        };
+      } else {
+        // 월별 보기 모드: 해당 월의 주문만 조회
+        const year = parseInt(month.split('-')[0]);
+        const monthNum = parseInt(month.split('-')[1]);
+        
+        // 다음 달의 첫날 계산 (마지막 날 구하기 위함)
+        const nextMonth = monthNum === 12 ? new Date(year + 1, 0, 1) : new Date(year, monthNum, 1);
+        
+        // 선택된 월의 첫날부터 마지막날까지
+        whereCondition.deliveryDate = {
+          gte: startMonth,
+          lt: nextMonth
+        };
+      }
     }
-
-    // 사용자 역할에 따른 조회 조건 설정
-    let whereCondition: any = {
-      ...dateFilter,
-    };
-
-    // 지점 사용자인 경우 자신의 주문만 조회
-    if (session.user.role === 'BRANCH') {
+    
+    // 사용자 역할에 따른 조건 설정
+    if (session?.user.role === 'BRANCH') {
+      // 지점 사용자: 자신의 주문만 조회
       whereCondition.userId = session.user.id;
-      console.log('주문 목록 조회 - 지점 사용자 필터 적용:', session.user.id);
-    } else {
-      console.log('주문 목록 조회 - 관리자 사용자, 모든 주문 조회');
     }
-
-    console.log('주문 목록 조회 - 최종 쿼리 조건:', JSON.stringify(whereCondition, null, 2));
-
-    // 주문 목록 조회
+    
+    // 주문 데이터 조회 (기본적으로 최신 납품일자순으로 정렬)
     const orders = await prisma.order.findMany({
       where: whereCondition,
+      orderBy: {
+        deliveryDate: 'desc' // 내림차순 (최신 납품일자순)
+      },
       include: {
         orderItems: true,
         user: {
           select: {
             name: true,
-            branchName: true,
-          },
-        },
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
-    });
-
-    console.log(`주문 목록 조회 - 결과: ${orders.length}개의 주문 조회됨`);
-    
-    // 각 주문의 ID 로깅
-    orders.forEach((order, index) => {
-      console.log(`주문 ${index + 1}: ID=${order.id}, 날짜=${order.deliveryDate}, 하차지=${order.destination}`);
+            branchName: true
+          }
+        }
+      }
     });
     
     // 응답 데이터 구성
-    const responseData = {
-      success: true,
-      count: orders.length,
-      orders: orders
-    };
+    const formattedOrders = orders.map(order => ({
+      ...order,
+      items: order.orderItems // orderItems를 items로 변환
+    }));
     
-    // 응답 데이터 로깅
-    try {
-      const jsonResponse = JSON.stringify(responseData);
-      console.log('주문 목록 조회 - 응답 데이터 크기:', jsonResponse.length);
-      
-      // 응답 데이터 구조 로깅
-      console.log('주문 목록 조회 - 응답 데이터 구조:', 
-        JSON.stringify({
-          type: 'object',
-          success: responseData.success,
-          count: responseData.count,
-          ordersType: Array.isArray(responseData.orders) ? 'array' : typeof responseData.orders
-        })
-      );
-    } catch (stringifyError) {
-      console.error('주문 목록 조회 - 응답 데이터 로깅 오류:', stringifyError);
-    }
+    console.log(`주문 목록 조회 결과 (${timestamp}): ${formattedOrders.length}개 주문 조회됨`);
     
-    return NextResponse.json(responseData);
+    // 캐시 방지 헤더와 함께 응답 반환
+    return new Response(
+      JSON.stringify({
+        success: true,
+        count: formattedOrders.length,
+        filters: { month, showAll, startDate },
+        orders: formattedOrders,
+        timestamp
+      }),
+      { 
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        } 
+      }
+    );
   } catch (error) {
-    console.error('주문 목록 조회 오류:', error);
-    return NextResponse.json(
-      { error: '주문 목록 조회 중 오류가 발생했습니다.' },
-      { status: 500 }
+    console.error('주문 목록 조회 중 오류:', error);
+    
+    return new Response(
+      JSON.stringify({
+        success: false, 
+        error: error instanceof Error ? error.message : '주문 목록을 불러오는 중 오류가 발생했습니다.',
+        timestamp: Date.now()
+      }),
+      { 
+        status: 500,
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0'
+        } 
+      }
     );
   }
 } 

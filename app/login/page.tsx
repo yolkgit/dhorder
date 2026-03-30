@@ -71,16 +71,16 @@ export default function LoginPage() {
   };
 
   // 테스트 계정 자동 입력
-  const fillTestAccount = (type: 'admin' | 'branch') => {
-    if (type === 'admin') {
-      setUsername('admin');
-      setPassword('admin123');
-    } else {
-      setUsername('branch');
-      setPassword('branch123');
-    }
-    setError('');
-  };
+ // const fillTestAccount = (type: 'admin' | 'branch') => {
+ //   if (type === 'admin') {
+ //     setUsername('admin');
+ //     setPassword('admin123');
+ //   } else {
+ //     setUsername('branch');
+ //     setPassword('branch123');
+ //   }
+ //   setError('');
+ // };
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-100 px-4">
@@ -126,29 +126,7 @@ export default function LoginPage() {
               {isLoading ? '로그인 중...' : '로그인'}
             </Button>
             
-            <div className="pt-2 flex flex-col gap-2">
-              <p className="text-xs text-center text-gray-500">테스트 계정으로 로그인</p>
-              <div className="flex gap-2">
-                <Button 
-                  type="button" 
-                  variant="outline" 
-                  size="sm" 
-                  className="flex-1"
-                  onClick={() => fillTestAccount('admin')}
-                >
-                  관리자 계정
-                </Button>
-                <Button 
-                  type="button" 
-                  variant="outline" 
-                  size="sm" 
-                  className="flex-1"
-                  onClick={() => fillTestAccount('branch')}
-                >
-                  지점 계정
-                </Button>
-              </div>
-            </div>
+
           </form>
         </CardContent>
         <CardFooter className="flex justify-center">
