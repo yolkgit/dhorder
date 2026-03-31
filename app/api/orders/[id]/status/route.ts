@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { prisma } from '@/lib/prisma';
 import { authOptions } from '../../../auth/[...nextauth]/route';
 import { sendOrderUpdateNotification } from '@/lib/telegram';
+import { orderBroadcaster } from '@/lib/orderEvents';
 
 // 주문 상태 변경 API
 export async function PUT(
@@ -135,6 +136,9 @@ export async function PUT(
       timestamp
     };
     
+    // 🔔 SSE 실시간 알림 브로드캐스트
+    orderBroadcaster.notifyOrderChange('statusChanged', orderId);
+
     // 응답 반환
     return new Response(
       JSON.stringify({

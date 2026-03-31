@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { prisma } from '@/lib/prisma';
 import { authOptions } from '../auth/[...nextauth]/route';
 import { sendNewOrderNotification } from '@/lib/telegram';
+import { orderBroadcaster } from '@/lib/orderEvents';
 
 // 주문 생성 API
 export async function POST(req: Request) {
@@ -120,7 +121,8 @@ export async function POST(req: Request) {
       destination, 
       address, 
       phoneNumber, 
-      memo, 
+      memo,
+      isWingCarRestricted, 
       orderItems 
     } = requestBody;
 
@@ -131,7 +133,8 @@ export async function POST(req: Request) {
       destination, 
       address, 
       phoneNumber, 
-      memo, 
+      memo,
+      isWingCarRestricted, 
       orderItems 
     });
 
@@ -284,6 +287,7 @@ export async function POST(req: Request) {
         address,
         phoneNumber,
         memo,
+        isWingCarRestricted: isWingCarRestricted === true,
         status: 'RECEIVED',
         orderItems: {
           create: orderItems.map(item => ({
@@ -319,6 +323,9 @@ export async function POST(req: Request) {
       });
     }
     
+    // 🔔 SSE 실시간 알림 브로드캐스트
+    orderBroadcaster.notifyOrderChange('created', order.id);
+
     // 성공 응답
     const successResponse = JSON.stringify({
       success: true,

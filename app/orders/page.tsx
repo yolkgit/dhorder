@@ -152,7 +152,12 @@ const OrderDetailsDialog = ({ order, onDelete, isObserver, session }: { order: a
             
             <div>
               <p className="text-sm font-medium text-gray-500">하차지</p>
-              <p>{order.destination || '정보 없음'}</p>
+              <div className="flex items-center">
+                <span>{order.destination || '정보 없음'}</span>
+                {order.isWingCarRestricted && (
+                  <span className="ml-2 text-xs font-bold text-red-500 bg-red-50 px-1.5 py-0.5 rounded border border-red-200">윙카X</span>
+                )}
+              </div>
             </div>
             
             <div>
@@ -605,13 +610,15 @@ export default function OrdersPage() {
   }, [currentAndFutureOrders, todayOrdersSortField, todayOrdersSortDirection]);
 
   // 오늘 이후 주문 데이터 불러오기 (별도 함수)
-  const fetchTodayOrders = useCallback(async (forceTimestamp?: number) => {
+  const fetchTodayOrders = useCallback(async (forceTimestamp?: number, isBackground = false) => {
     // 이전 요청 취소
     if (todayControllerRef.current) {
       todayControllerRef.current.abort();
     }
 
-    setIsTodayLoading(true);
+    if (!isBackground) {
+      setIsTodayLoading(true);
+    }
     
     // 새 요청을 위한 컨트롤러
     const controller = new AbortController();
@@ -664,14 +671,16 @@ export default function OrdersPage() {
   }, []);
 
   // 필터링된 주문 목록 불러오기
-  const fetchOrders = useCallback(async (month: string, showAll: boolean, forceTimestamp?: number) => {
+  const fetchOrders = useCallback(async (month: string, showAll: boolean, forceTimestamp?: number, isBackground = false) => {
     // 기존 요청 취소
     if (controllerRef.current) {
       controllerRef.current.abort();
     }
     
     // 로딩 상태 설정
-    setIsLoading(true);
+    if (!isBackground) {
+      setIsLoading(true);
+    }
     
     // 새 요청을 위한 컨트롤러
     const controller = new AbortController();
@@ -1145,35 +1154,7 @@ export default function OrdersPage() {
     fetchOrders(selectedMonth, showAllOrders);
     fetchTodayOrders(); // 오늘 이후 주문 데이터도 함께 로드
     
-    // 60초마다 자동 새로고침
-    const refreshInterval = setInterval(() => {
-      console.log('자동 새로고침 실행');
-      // localStorage에서 현재 필터 설정 가져오기
-      const currentShowAllOrders = localStorage.getItem('showAllOrders') === 'true';
-      const currentSelectedMonth = localStorage.getItem('selectedMonth') || selectedMonth;
-      const currentStartDate = localStorage.getItem('startDate') || startDate;
-      const currentEndDate = localStorage.getItem('endDate') || endDate;
-      const currentSortField = localStorage.getItem('sortField') || sortField;
-      const currentSortDirection = localStorage.getItem('sortDirection') as 'asc' | 'desc' | 'createdAt' || sortDirection;
-      
-      console.log(`새로고침 설정: 월=${currentSelectedMonth}, 전체보기=${currentShowAllOrders}`);
-      
-      // state 업데이트
-      setSelectedMonth(currentSelectedMonth);
-      setShowAllOrders(currentShowAllOrders);
-      setStartDate(currentStartDate);
-      setEndDate(currentEndDate);
-      setSortField(currentSortField);
-      setSortDirection(currentSortDirection === 'asc' || currentSortDirection === 'desc' || currentSortDirection === 'createdAt' ? currentSortDirection : 'desc');
-      
-      // 현재 localStorage에 저장된 설정으로 데이터 가져오기
-      fetchOrders(currentSelectedMonth, currentShowAllOrders);
-      fetchTodayOrders();
-    }, 60000);
-    
     return () => {
-      clearInterval(refreshInterval);
-      
       // 진행 중인 요청 취소
       if (controllerRef.current) {
         controllerRef.current.abort();
@@ -1184,6 +1165,65 @@ export default function OrdersPage() {
       }
     };
   }, [fetchOrders, fetchTodayOrders, selectedMonth, showAllOrders]);
+
+  // 🔔 SSE(Server-Sent Events) 실시간 푸시 연결
+  useEffect(() => {
+    let eventSource: EventSource | null = null;
+    let reconnectTimeout: NodeJS.Timeout | null = null;
+
+    const connect = () => {
+      eventSource = new EventSource('/api/orders/stream');
+
+      eventSource.addEventListener('connected', (e) => {
+        console.log('[SSE] 서버 연결 완료:', JSON.parse(e.data));
+      });
+
+      eventSource.addEventListener('orderChange', (e) => {
+        const data = JSON.parse(e.data);
+        console.log('[SSE] 주문 변경 수신:', data);
+
+        // 현재 필터 설정으로 데이터를 백그라운드 모드로 다시 가져오기
+        const currentShowAllOrders = localStorage.getItem('showAllOrders') === 'true';
+        const currentSelectedMonth = localStorage.getItem('selectedMonth') || selectedMonth;
+        const currentStartDate = localStorage.getItem('startDate') || startDate;
+        const currentEndDate = localStorage.getItem('endDate') || endDate;
+        const currentSortField = localStorage.getItem('sortField') || sortField;
+        const currentSortDirection = localStorage.getItem('sortDirection') as 'asc' | 'desc' | 'createdAt' || sortDirection;
+
+        // state 업데이트
+        setSelectedMonth(currentSelectedMonth);
+        setShowAllOrders(currentShowAllOrders);
+        setStartDate(currentStartDate);
+        setEndDate(currentEndDate);
+        setSortField(currentSortField);
+        setSortDirection(currentSortDirection === 'asc' || currentSortDirection === 'desc' || currentSortDirection === 'createdAt' ? currentSortDirection : 'desc');
+
+        // 백그라운드 모드로 데이터 갱신 (깜박임 없음)
+        fetchOrders(currentSelectedMonth, currentShowAllOrders, undefined, true);
+        fetchTodayOrders(undefined, true);
+      });
+
+      eventSource.addEventListener('heartbeat', () => {
+        // 연결 유지 확인 (별도 처리 불필요)
+      });
+
+      eventSource.onerror = () => {
+        console.log('[SSE] 연결 끊김, 3초 후 재연결...');
+        eventSource?.close();
+        eventSource = null;
+        // 자동 재연결
+        reconnectTimeout = setTimeout(connect, 3000);
+      };
+    };
+
+    connect();
+
+    return () => {
+      eventSource?.close();
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+    };
+  }, [fetchOrders, fetchTodayOrders, selectedMonth, showAllOrders, startDate, endDate, sortField, sortDirection]);
+
 
   // localStorage에 필터 설정 저장
   useEffect(() => {
@@ -1287,9 +1327,21 @@ export default function OrdersPage() {
                           onStatusChange={handleChangeStatus}
                         />
                       </TableCell>
-                      <TableCell className="text-center py-0.5 px-0.5">{new Date(order.deliveryDate).toLocaleDateString()}</TableCell>
+                      <TableCell className="text-center py-0.5 px-0.5">
+                        <div className="flex flex-col items-center leading-tight">
+                          <span>{new Date(order.deliveryDate).toLocaleDateString()}</span>
+                          <span className="text-xs text-blue-600 font-medium mt-0.5">{order.arrivalTime}</span>
+                        </div>
+                      </TableCell>
                       <TableCell className="text-center py-0.5 px-0.5">{order.user?.branchName || order.user?.name || '정보 없음'}</TableCell>
-                      <TableCell className="text-center py-0.5 px-0.5">{order.destination}</TableCell>
+                      <TableCell className="text-center py-0.5 px-0.5">
+                        <div className="flex flex-col items-center leading-tight">
+                          <span>{order.destination}</span>
+                          {order.isWingCarRestricted && (
+                            <span className="text-[10px] font-bold text-red-500 bg-red-50 px-1 mt-0.5 rounded border border-red-200">윙카X</span>
+                          )}
+                        </div>
+                      </TableCell>
                       <TableCell className="max-w-[150px] truncate text-center py-0.5 px-0.5">{order.memo}</TableCell>
                       <TableCell className="text-center py-0.5 px-0.5">
                         {order.items && Array.isArray(order.items) ? (

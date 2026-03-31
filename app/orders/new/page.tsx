@@ -139,6 +139,7 @@ export default function NewOrderPage() {
     detailAddress: '', // 상세 주소 필드 추가
     phoneNumber: '',
     memo: '',
+    isWingCarRestricted: false,
   });
 
   // 주문 항목 상태
@@ -640,9 +641,21 @@ export default function NewOrderPage() {
                 </div>
 
                 <div className="space-y-2 relative">
-                  <label htmlFor="destination" className="text-sm font-medium">
-                    하차지 *
-                  </label>
+                  <div className="flex justify-between items-center mb-1">
+                    <label htmlFor="destination" className="text-sm font-medium">
+                      하차지 *
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        name="isWingCarRestricted"
+                        checked={orderData.isWingCarRestricted || false}
+                        onChange={(e) => setOrderData(prev => ({ ...prev, isWingCarRestricted: e.target.checked }))}
+                        className="w-4 h-4 accent-red-500 cursor-pointer"
+                      />
+                      <span className="text-sm font-bold text-red-500 bg-red-50 px-2 py-0.5 rounded border border-red-200">윙카X</span>
+                    </label>
+                  </div>
                   <Input
                     id="destination"
                     name="destination"

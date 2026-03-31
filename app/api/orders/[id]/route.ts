@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { prisma } from '@/lib/prisma';
 import { authOptions } from '../../auth/[...nextauth]/route';
 import { sendOrderUpdateNotification } from '@/lib/telegram';
+import { orderBroadcaster } from '@/lib/orderEvents';
 
 // 특정 주문 조회 API
 export async function GET(req: Request, { params }: { params: { id: string } }) {
@@ -284,6 +285,9 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
       });
     }
 
+    // 🔔 SSE 실시간 알림 브로드캐스트
+    orderBroadcaster.notifyOrderChange('updated', orderId);
+
     // 응답 데이터 구성
     return NextResponse.json({
       success: true,
@@ -373,6 +377,9 @@ export async function DELETE(req: Request, { params }: { params: { id: string } 
     });
 
     console.log('주문 삭제 성공:', orderId);
+
+    // 🔔 SSE 실시간 알림 브로드캐스트
+    orderBroadcaster.notifyOrderChange('deleted', orderId);
 
     // 응답 데이터 구성
     return NextResponse.json({

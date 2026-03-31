@@ -85,42 +85,61 @@ export default function EditOrderPage() {
     }
   }, [session, status, orderId]);
 
-  // 🔥 주문 상태 주기적 체크
+  // 🔔 SSE(Server-Sent Events)로 실시간 주문 상태 변경 감지
   useEffect(() => {
     if (!orderId || !orderData.status) return;
 
-    const checkOrderStatus = async () => {
-      try {
-        const response = await fetch(`/api/orders/${orderId}`);
-        if (response.ok) {
-          const data = await response.json();
-          const currentStatus = data.order?.status;
-          
-          // 상태가 변경되었고, 수정 불가 상태인 경우
-          if (currentStatus !== orderData.status && 
-              ['DISPATCHED', 'DELIVERED'].includes(currentStatus)) {
-            
-            const statusText = currentStatus === 'DISPATCHED' ? '배차 처리' : '배송 완료';
-            toast.warning(`이 주문이 ${statusText}되었습니다. 수정이 불가능합니다.`);
-            
-            // 상태 업데이트
-            setOrderData(prev => ({ ...prev, status: currentStatus }));
-            
-            // 1.5초 후 주문 목록으로 이동
-            setTimeout(() => {
-              router.push('/orders');
-            }, 1500);
+    let eventSource: EventSource | null = null;
+    let reconnectTimeout: NodeJS.Timeout | null = null;
+
+    const connect = () => {
+      eventSource = new EventSource('/api/orders/stream');
+
+      eventSource.addEventListener('orderChange', async (e) => {
+        const data = JSON.parse(e.data);
+        // 현재 수정 중인 주문의 상태가 변경된 경우에만 처리
+        if (data.orderId === orderId || data.type === 'statusChanged') {
+          try {
+            const response = await fetch(`/api/orders/${orderId}`);
+            if (response.ok) {
+              const result = await response.json();
+              const currentStatus = result.order?.status;
+
+              // 상태가 변경되었고, 수정 불가 상태인 경우
+              if (currentStatus !== orderData.status &&
+                  ['DISPATCHED', 'DELIVERED'].includes(currentStatus)) {
+
+                const statusText = currentStatus === 'DISPATCHED' ? '배차 처리' : '배송 완료';
+                toast.warning(`이 주문이 ${statusText}되었습니다. 수정이 불가능합니다.`);
+
+                // 상태 업데이트
+                setOrderData(prev => ({ ...prev, status: currentStatus }));
+
+                // 1.5초 후 주문 목록으로 이동
+                setTimeout(() => {
+                  router.push('/orders');
+                }, 1500);
+              }
+            }
+          } catch (error) {
+            console.error('주문 상태 체크 오류:', error);
           }
         }
-      } catch (error) {
-        console.error('주문 상태 체크 오류:', error);
-      }
+      });
+
+      eventSource.onerror = () => {
+        eventSource?.close();
+        eventSource = null;
+        reconnectTimeout = setTimeout(connect, 3000);
+      };
     };
 
-    // 30초마다 상태 체크
-    const statusCheckInterval = setInterval(checkOrderStatus, 30000);
+    connect();
 
-    return () => clearInterval(statusCheckInterval);
+    return () => {
+      eventSource?.close();
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+    };
   }, [orderId, orderData.status, router]);
 
   // 카카오 주소 검색 API 스크립트 로드
