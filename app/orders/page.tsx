@@ -1334,7 +1334,10 @@ export default function OrdersPage() {
                         </div>
                       </TableCell>
                       <TableCell className="text-center py-0.5 px-0.5">{order.user?.branchName || order.user?.name || '정보 없음'}</TableCell>
-                      <TableCell className="text-center py-0.5 px-0.5">
+                      <TableCell 
+                        className="text-center py-0.5 px-0.5"
+                        title={`${order.address || '정보 없음'} / ${order.phoneNumber || '정보 없음'}`}
+                      >
                         <div className="flex flex-col items-center leading-tight">
                           <span>{order.destination}</span>
                           {order.isWingCarRestricted && (
@@ -1511,7 +1514,12 @@ export default function OrdersPage() {
                           </TableCell>
                       <TableCell className="text-center py-0.5 px-0.5">{new Date(order.deliveryDate).toLocaleDateString()}</TableCell>
                       <TableCell className="text-center py-0.5 px-0.5">{order.user?.branchName || order.user?.name || '정보 없음'}</TableCell>
-                      <TableCell className="text-center py-0.5 px-0.5">{order.destination}</TableCell>
+                      <TableCell 
+                        className="text-center py-0.5 px-0.5"
+                        title={`${order.address || '정보 없음'} / ${order.phoneNumber || '정보 없음'}`}
+                      >
+                        {order.destination}
+                      </TableCell>
                       <TableCell className="max-w-[150px] truncate text-center py-0.5 px-0.5">{order.memo}</TableCell>
                       <TableCell className="text-center py-0.5 px-0.5">
                         {order.items && Array.isArray(order.items) ? (
