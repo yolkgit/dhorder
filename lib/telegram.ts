@@ -162,7 +162,7 @@ export async function sendNewOrderNotification(order: any): Promise<void> {
 <b>지점명:</b> ${order.user?.branchName || order.user?.name || '정보 없음'}
 <b>배송일:</b> ${new Date(order.deliveryDate).toLocaleDateString('ko-KR')}
 <b>도착 시간:</b> ${order.arrivalTime || '정보 없음'}
-<b>하차지:</b> ${order.destination || '정보 없음'}
+<b>하차지:</b> ${order.destination || '정보 없음'}${order.isWingCarRestricted ? ' <b>(윙카X)</b>' : ''}
 <b>주소:</b> ${order.address || '정보 없음'}
 <b>연락처:</b> ${order.phoneNumber || '정보 없음'}
 ${order.memo ? `<b>메모:</b> ${order.memo}` : ''}
@@ -217,7 +217,7 @@ export async function sendOrderUpdateNotification(order: any, oldStatus?: string
 ${statusText}<b>지점명:</b> ${order.user?.branchName || order.user?.name || '정보 없음'}
 <b>배송일:</b> ${new Date(order.deliveryDate).toLocaleDateString('ko-KR')}
 <b>도착 시간:</b> ${order.arrivalTime || '정보 없음'}
-<b>하차지:</b> ${order.destination || '정보 없음'}
+<b>하차지:</b> ${order.destination || '정보 없음'}${order.isWingCarRestricted ? ' <b>(윙카X)</b>' : ''}
 <b>주소:</b> ${order.address || '정보 없음'}
 <b>연락처:</b> ${order.phoneNumber || '정보 없음'}
 ${order.memo ? `<b>메모:</b> ${order.memo}` : ''}

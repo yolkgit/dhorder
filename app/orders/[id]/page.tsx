@@ -153,7 +153,12 @@ export default function OrderDetailPage() {
           <div>
             <p className="text-sm text-gray-500 mb-1">배송지 정보</p>
             <div className="bg-gray-50 p-3 rounded-md">
-              <p className="font-medium mb-1">{order.destination}</p>
+              <p className="font-medium mb-1 flex items-center">
+                {order.destination}
+                {order.isWingCarRestricted && (
+                  <span className="ml-2 text-xs font-bold text-red-500 bg-red-50 px-1.5 py-0.5 rounded border border-red-200">윙카X</span>
+                )}
+              </p>
               <p className="text-sm text-gray-600">{order.address}</p>
             </div>
           </div>

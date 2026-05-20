@@ -199,6 +199,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
       address,
       phoneNumber,
       memo,
+      isWingCarRestricted,
       items // 항목 배열
     } = requestData;
 
@@ -248,6 +249,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
           address,
           phoneNumber,
           memo,
+          isWingCarRestricted: isWingCarRestricted === true,
           orderItems: {
             create: items.map((item: any) => ({
               itemName: item.itemName,
