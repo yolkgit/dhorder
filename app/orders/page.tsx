@@ -101,6 +101,11 @@ const OrderItemsList = ({ items }: { items: any[] }) => {
   );
 };
 
+// 친환경 제설제(DHECO-JS 시리즈) 품목이 하나라도 있는 주문인지 확인
+const isEcoDeIcerOrder = (order: any) =>
+  Array.isArray(order?.items) &&
+  order.items.some((item: any) => /DHECO-JS|제설/i.test(item?.itemName || ''));
+
 // 주문 상세 정보 다이얼로그 컴포넌트
 const OrderDetailsDialog = ({ order, onDelete, isObserver, session }: { order: any, onDelete: (id: string) => Promise<void>, isObserver: boolean, session: any }) => {
   // 주문 생성 시간을 초까지 포맷팅하는 함수
@@ -214,15 +219,17 @@ const OrderDetailsDialog = ({ order, onDelete, isObserver, session }: { order: a
                     수정
                   </Link>
                 </Button>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => onDelete(order.id)}
-                  className="flex items-center"
-                >
-                  <Trash2 className="h-4 w-4 mr-1" />
-                  삭제
-                </Button>
+                {order.status === 'RECEIVED' && (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => onDelete(order.id)}
+                    className="flex items-center"
+                  >
+                    <Trash2 className="h-4 w-4 mr-1" />
+                    삭제
+                  </Button>
+                )}
               </>
             )}
           </div>
@@ -1317,7 +1324,7 @@ export default function OrdersPage() {
                 </TableHeader>
                 <TableBody>
                   {sortedCurrentAndFutureOrders.map((order, index) => (
-                    <TableRow key={order.id} className="h-10">
+                    <TableRow key={order.id} className={`h-10 ${isEcoDeIcerOrder(order) ? 'bg-green-50 hover:bg-green-100' : ''}`}>
                       <TableCell className="font-medium text-center py-0.5 px-0.5">{sortedCurrentAndFutureOrders.length - index}</TableCell>
                       <TableCell className="text-center py-0.5 px-0.5">
                         <OrderStatusBadge 
@@ -1502,7 +1509,7 @@ export default function OrdersPage() {
                 </TableHeader>
                 <TableBody>
                   {sortedOrders.map((order, index) => (
-                    <TableRow key={order.id} className="h-10">
+                    <TableRow key={order.id} className={`h-10 ${isEcoDeIcerOrder(order) ? 'bg-green-50 hover:bg-green-100' : ''}`}>
                       <TableCell className="font-medium text-center py-0.5 px-0.5">{sortedOrders.length - index}</TableCell>
                       <TableCell className="text-center py-0.5 px-0.5">
                             <OrderStatusBadge 

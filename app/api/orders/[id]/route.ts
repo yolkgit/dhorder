@@ -327,6 +327,7 @@ export async function DELETE(req: Request, { params }: { params: { id: string } 
     // Next.js 13.4 이상에서는 params가 Promise일 수 있으므로 await를 사용합니다
     const orderId = params.id;
     console.log('주문 삭제 - 주문 ID:', orderId);
+    console.log('주문 삭제 - 요청자:', session.user.email, 'IP:', req.headers.get('x-real-ip') || req.headers.get('x-forwarded-for') || '-');
 
     // 주문 존재 여부 확인
     const existingOrder = await prisma.order.findUnique({
@@ -356,11 +357,12 @@ export async function DELETE(req: Request, { params }: { params: { id: string } 
       );
     }
 
-    // 주문 상태 확인 - 완료된 주문은 삭제 불가
-    if (existingOrder.status === 'DELIVERED') {
+    // 주문 상태 확인 - 배차 또는 배송 완료된 주문은 삭제 불가
+    if (existingOrder.status === 'DISPATCHED' || existingOrder.status === 'DELIVERED') {
       console.log('주문 삭제 - 삭제 불가 상태:', existingOrder.status);
+      const statusText = existingOrder.status === 'DISPATCHED' ? '배차된' : '배송 완료된';
       return NextResponse.json(
-        { error: '배송 완료된 주문은 삭제할 수 없습니다.' },
+        { error: `${statusText} 주문은 삭제할 수 없습니다. 배차를 취소(접수 상태로 변경)한 뒤 삭제해 주세요.` },
         { status: 400 }
       );
     }
