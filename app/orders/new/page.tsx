@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { getItemTextClass } from '@/lib/itemColor';
 import { toast } from 'sonner';
 import { PlusCircle, Trash2, Search } from 'lucide-react';
 import Link from 'next/link';
@@ -358,7 +359,7 @@ export default function NewOrderPage() {
   // 품목 선택 옵션 메모이제이션
   const itemOptions = useMemo(() => {
     return items.map((itemOption) => (
-      <option key={itemOption.id} value={itemOption.name}>
+      <option key={itemOption.id} value={itemOption.name} className={getItemTextClass(itemOption.name)}>
         {itemOption.name}
       </option>
     ));
@@ -391,7 +392,7 @@ export default function NewOrderPage() {
           ) : items.length > 0 ? (
             <select
               id={`itemName-${index}`}
-              className="w-full h-10 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className={`w-full h-10 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${getItemTextClass(item.itemName)}`}
               value={item.itemName}
               onChange={(e) => handleItemChange(index, 'itemName', e.target.value)}
               required
@@ -403,6 +404,7 @@ export default function NewOrderPage() {
             <Input
               id={`itemName-${index}`}
               placeholder="품목명 입력"
+              className={getItemTextClass(item.itemName)}
               value={item.itemName}
               onChange={(e) => handleItemChange(index, 'itemName', e.target.value)}
               required
@@ -417,6 +419,7 @@ export default function NewOrderPage() {
             id={`quantity-${index}`}
             type="number"
             min="0"
+            className={getItemTextClass(item.itemName)}
             value={item.quantity}
             onChange={(e) => handleItemChange(index, 'quantity', parseInt(e.target.value) || 0)}
             onClick={(e) => (e.target as HTMLInputElement).select()}

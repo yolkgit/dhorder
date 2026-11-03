@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { getItemTextClass } from '@/lib/itemColor';
 import { toast } from 'sonner';
 import { PlusCircle, Trash2, Search } from 'lucide-react';
 import Link from 'next/link';
@@ -769,14 +770,14 @@ export default function EditOrderPage() {
                             id={`itemName-${index}`}
                             className={`w-full h-10 px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                               !item.itemName ? 'border-orange-300' : 'border-gray-300'
-                            }`}
+                            } ${getItemTextClass(item.itemName)}`}
                             value={item.itemName}
                             onChange={(e) => handleItemChange(index, 'itemName', e.target.value)}
                             required
                           >
                             <option value="">품목을 선택해주세요</option>
                             {items.map((itemOption) => (
-                              <option key={itemOption.id} value={itemOption.name}>
+                              <option key={itemOption.id} value={itemOption.name} className={getItemTextClass(itemOption.name)}>
                                 {itemOption.name}
                               </option>
                             ))}
@@ -788,7 +789,7 @@ export default function EditOrderPage() {
                             value={item.itemName}
                             onChange={(e) => handleItemChange(index, 'itemName', e.target.value)}
                             required
-                            className={!item.itemName ? 'border-orange-300' : ''}
+                            className={`${!item.itemName ? 'border-orange-300' : ''} ${getItemTextClass(item.itemName)}`}
                           />
                         )}
                       </div>
@@ -800,6 +801,7 @@ export default function EditOrderPage() {
                           id={`quantity-${index}`}
                           type="number"
                           min="0"
+                          className={getItemTextClass(item.itemName)}
                           value={item.quantity}
                           onChange={(e) => handleItemChange(index, 'quantity', parseInt(e.target.value) || 0)}
                           onClick={(e) => (e.target as HTMLInputElement).select()}

@@ -12,6 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { toast } from 'sonner';
 import { Edit, Trash2, Plus, Users, Package, Search } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from '@/components/ui/dialog';
+import { getItemTextClass } from '@/lib/itemColor';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -662,7 +663,7 @@ export default function AdminPage() {
                     <TableBody>
                       {items.map((item) => (
                         <TableRow key={item.id}>
-                          <TableCell className="font-medium">{item.name}</TableCell>
+                          <TableCell className={`font-medium ${getItemTextClass(item.name)}`}>{item.name}</TableCell>
                           <TableCell>{item.description || '-'}</TableCell>
                           <TableCell>{new Date(item.createdAt).toLocaleDateString()}</TableCell>
                           <TableCell className="text-right">

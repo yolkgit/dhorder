@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
+import { getItemTextClass } from '@/lib/itemColor';
 import { toast } from 'sonner';
 import { Edit, Trash2, Eye, Calendar, Truck } from 'lucide-react';
 import Link from 'next/link';
@@ -93,7 +94,7 @@ const OrderItemsList = ({ items }: { items: any[] }) => {
   return (
     <ul className="list-none p-0 m-0">
       {items.map((item, index) => (
-        <li key={index} className="mb-0.5">
+        <li key={index} className={`mb-0.5 ${getItemTextClass(item.itemName)}`}>
           {item.itemName}
         </li>
       ))}
@@ -196,8 +197,8 @@ const OrderDetailsDialog = ({ order, onDelete, isObserver, session }: { order: a
                     <tbody>
                       {order.items.map((item: any, idx: number) => (
                         <tr key={idx} className={idx !== order.items.length - 1 ? "border-b" : ""}>
-                          <td className="py-2">{item.itemName}</td>
-                          <td className="py-2 text-right font-medium">{item.quantity}개</td>
+                          <td className={`py-2 ${getItemTextClass(item.itemName)}`}>{item.itemName}</td>
+                          <td className={`py-2 text-right font-medium ${getItemTextClass(item.itemName)}`}>{item.quantity}개</td>
                         </tr>
                       ))}
                     </tbody>
@@ -396,13 +397,13 @@ const OrderAnalyticsTable = ({ orders }: { orders: any[] }) => {
                     {/* 품목별 상세 행 */}
                     {Object.entries(data.items).map(([item, quantities]) => (
                       <TableRow key={`${branch}-${item}`}>
-                        <TableCell className="pl-8">{item}</TableCell>
+                        <TableCell className={`pl-8 ${getItemTextClass(item)}`}>{item}</TableCell>
                         {months.map(month => (
-                          <TableCell key={month} className="text-right">
+                          <TableCell key={month} className={`text-right ${getItemTextClass(item)}`}>
                             {quantities[month]?.toLocaleString() || 0}
                           </TableCell>
                         ))}
-                        <TableCell className="text-right">
+                        <TableCell className={`text-right ${getItemTextClass(item)}`}>
                           {Object.values(quantities).reduce((sum, qty) => sum + (qty || 0), 0).toLocaleString()}
                         </TableCell>
                       </TableRow>
@@ -1363,7 +1364,7 @@ export default function OrdersPage() {
                       <TableCell className="text-center py-0.5 px-0.5">
                         {order.items && Array.isArray(order.items) 
                           ? order.items.map((item: any, idx: number) => (
-                              <div key={idx} className="mb-0.5">
+                              <div key={idx} className={`mb-0.5 ${getItemTextClass(item.itemName)}`}>
                                 {item.quantity || 0}
                               </div>
                             ))
@@ -1538,7 +1539,7 @@ export default function OrdersPage() {
                       <TableCell className="text-center py-0.5 px-0.5">
                         {order.items && Array.isArray(order.items) 
                           ? order.items.map((item: any, idx: number) => (
-                              <div key={idx} className="mb-0.5">
+                              <div key={idx} className={`mb-0.5 ${getItemTextClass(item.itemName)}`}>
                                     {item.quantity || 0}
                                   </div>
                                 ))

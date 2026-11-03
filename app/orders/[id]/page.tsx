@@ -9,6 +9,7 @@ import { Truck, Edit, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import OrderStatusBadge from '@/components/OrderStatusBadge';
+import { getItemTextClass } from '@/lib/itemColor';
 
 export default function OrderDetailPage() {
   const router = useRouter();
@@ -190,8 +191,8 @@ export default function OrderDetailPage() {
                 </thead>
                 <tbody>
                   {order.orderItems.map((item: any, index: number) => (
-                    <tr key={index} className="border-b">
-                      <td className="border px-4 py-2">{item.item?.name || '품목 정보 없음'}</td>
+                    <tr key={index} className={`border-b ${getItemTextClass(item.itemName || item.item?.name)}`}>
+                      <td className="border px-4 py-2">{item.itemName || item.item?.name || '품목 정보 없음'}</td>
                       <td className="border px-4 py-2 text-center">{item.quantity}</td>
                     </tr>
                   ))}
