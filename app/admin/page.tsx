@@ -10,7 +10,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { toast } from 'sonner';
-import { Edit, Trash2, Plus, Users, Package, Search } from 'lucide-react';
+import { Edit, Trash2, Plus, Users, Package, Search, Building2 } from 'lucide-react';
+import { SuppliersPanel } from '@/components/admin/suppliers-panel';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { getItemTextClass } from '@/lib/itemColor';
 import { shrinkToJpeg } from '@/lib/imageUpload';
@@ -600,6 +601,10 @@ export default function AdminPage() {
             <Package className="h-4 w-4" />
             품목 관리
           </TabsTrigger>
+          <TabsTrigger value="suppliers" className="flex items-center gap-2">
+            <Building2 className="h-4 w-4" />
+            공급자 관리
+          </TabsTrigger>
           <TabsTrigger value="users" className="flex items-center gap-2">
             <Users className="h-4 w-4" />
             회원 관리
@@ -1055,6 +1060,11 @@ export default function AdminPage() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* 공급자 관리 탭 (송장 출력용) */}
+        <TabsContent value="suppliers">
+          <SuppliersPanel />
         </TabsContent>
       </Tabs>
     </div>

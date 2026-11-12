@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { getItemTextClass } from '@/lib/itemColor';
 import { toast } from 'sonner';
-import { Edit, Trash2, Eye, Calendar, Truck } from 'lucide-react';
+import { Edit, Trash2, Eye, Calendar, Truck, Printer } from 'lucide-react';
 import Link from 'next/link';
 import { CalendarIcon, ListIcon, PlusIcon } from 'lucide-react';
 import { FilterIcon } from 'lucide-react';
@@ -232,6 +232,18 @@ const OrderDetailsDialog = ({ order, onDelete, isObserver, session }: { order: a
                   </Button>
                 )}
               </>
+            )}
+            {session?.user?.role === 'ADMIN' && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => window.open(`/orders/print?ids=${order.id}`, '_blank')}
+                className="flex items-center"
+                title="송장(출고지시서) 출력"
+              >
+                <Printer className="h-4 w-4 mr-1" />
+                송장 출력
+              </Button>
             )}
           </div>
         </DialogFooter>
