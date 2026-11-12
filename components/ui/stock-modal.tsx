@@ -56,6 +56,8 @@ export function StockModal() {
   if (status !== 'authenticated' || session?.user?.role !== 'ADMIN') return null;
 
   const md = data ? data.date.slice(5).replace('-', '/') : '';
+  // 재고가 0인 제품은 표시하지 않는다 (마이너스 재고는 확인이 필요하므로 그대로 표시)
+  const visibleItems = data ? data.items.filter((it) => it.stock !== 0) : [];
   return (
     <>
       <Button variant="outline" size="sm" onClick={() => setOpen(true)} className="flex items-center h-10 sm:h-9">
@@ -108,9 +110,13 @@ export function StockModal() {
             </div>
           )}
 
+          {data && visibleItems.length === 0 && (
+            <div className="py-10 text-center text-sm text-gray-500">재고가 있는 제품이 없습니다.</div>
+          )}
+
           {data && (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-              {data.items.map((it) => (
+              {visibleItems.map((it) => (
                 <div
                   key={it.name}
                   className="flex flex-col overflow-hidden rounded-lg border bg-white"
