@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 import { PrismaClient, Prisma } from '@prisma/client';
+import { listImageVersions, removeItemImage } from '@/lib/itemImages';
 
 // PrismaClient 인스턴스 생성
 const prisma = new PrismaClient({
@@ -23,10 +24,14 @@ export async function GET(req: Request) {
 
       console.log(`품목 목록 조회 - ${items.length}개의 품목 조회됨`);
 
+      // 품목 사진이 있으면 수정 시각(imageVersion)을 함께 내려준다
+      const versions = await listImageVersions();
+      const itemsWithImage = items.map((it: any) => ({ ...it, imageVersion: versions.get(it.id) ?? null }));
+
       // 응답 형식 통일
       return NextResponse.json({
         success: true,
-        items: items,
+        items: itemsWithImage,
         count: items.length
       });
     } catch (dbError) {
@@ -379,6 +384,7 @@ export async function DELETE(req: Request) {
         where: { id },
       });
 
+      await removeItemImage(id).catch((e: unknown) => console.error('품목 사진 삭제 실패:', e));
       console.log('품목 삭제 성공:', id);
 
       return NextResponse.json({

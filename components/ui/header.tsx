@@ -6,6 +6,7 @@ import { LogOut, User, Package, Settings } from 'lucide-react';
 import { Button } from './button';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
+import { StockModal } from './stock-modal';
 
 export function Header() {
   const { data: session, status } = useSession();
@@ -69,6 +70,7 @@ export function Header() {
                   {session.user.role === 'ADMIN' ? '관리자' : '지점'}
                 </span>
               </div>
+              <StockModal />
               <Button 
                 variant="outline" 
                 size="sm" 

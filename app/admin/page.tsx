@@ -13,6 +13,7 @@ import { toast } from 'sonner';
 import { Edit, Trash2, Plus, Users, Package, Search } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { getItemTextClass } from '@/lib/itemColor';
+import { shrinkToJpeg } from '@/lib/imageUpload';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -33,6 +34,7 @@ type Item = {
   description: string | null;
   createdAt: string;
   updatedAt: string;
+  imageVersion?: number | null;
 };
 
 // 사용자 타입 정의
@@ -51,6 +53,7 @@ export default function AdminPage() {
   
   // 상태 관리
   const [items, setItems] = useState<Item[]>([]);
+  const [photoBusyId, setPhotoBusyId] = useState<string | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('items');
@@ -316,6 +319,45 @@ export default function AdminPage() {
   };
   
   // 품목 삭제 핸들러
+  // 품목 사진 등록/변경 (브라우저에서 줄여 JPEG로 올림)
+  const handlePhotoSelected = async (itemId: string, file: File | undefined) => {
+    if (!file) return;
+    setPhotoBusyId(itemId);
+    try {
+      const blob = await shrinkToJpeg(file);
+      const response = await fetch(`/api/items/${itemId}/image`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'image/jpeg' },
+        body: blob,
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || '사진을 올리지 못했습니다.');
+      toast.success('사진이 저장되었습니다.');
+      await fetchItems();
+    } catch (error: any) {
+      toast.error(error.message || '사진을 올리지 못했습니다.');
+    } finally {
+      setPhotoBusyId(null);
+    }
+  };
+
+  // 품목 사진 삭제
+  const handlePhotoDelete = async (itemId: string) => {
+    if (!confirm('이 품목의 사진을 삭제하시겠습니까?')) return;
+    setPhotoBusyId(itemId);
+    try {
+      const response = await fetch(`/api/items/${itemId}/image`, { method: 'DELETE' });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || '사진을 삭제하지 못했습니다.');
+      toast.success('사진이 삭제되었습니다.');
+      await fetchItems();
+    } catch (error: any) {
+      toast.error(error.message || '사진을 삭제하지 못했습니다.');
+    } finally {
+      setPhotoBusyId(null);
+    }
+  };
+
   const handleDeleteItem = async () => {
     try {
       if (!deleteItemId) return;
@@ -655,6 +697,7 @@ export default function AdminPage() {
                     <TableHeader>
                       <TableRow>
                         <TableHead className="w-[200px]">품목명</TableHead>
+                        <TableHead className="w-[150px]">사진</TableHead>
                         <TableHead>설명</TableHead>
                         <TableHead className="w-[150px]">등록일</TableHead>
                         <TableHead className="w-[120px] text-right">관리</TableHead>
@@ -664,6 +707,53 @@ export default function AdminPage() {
                       {items.map((item) => (
                         <TableRow key={item.id}>
                           <TableCell className={`font-medium ${getItemTextClass(item.name)}`}>{item.name}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              {item.imageVersion ? (
+                                <a href={`/item-image/${item.id}?v=${item.imageVersion}`} target="_blank" rel="noreferrer" title="크게 보기">
+                                  <img
+                                    src={`/item-image/${item.id}?v=${item.imageVersion}`}
+                                    alt={item.name}
+                                    className="h-12 w-12 rounded border object-cover"
+                                  />
+                                </a>
+                              ) : (
+                                <div className="flex h-12 w-12 items-center justify-center rounded border border-dashed text-[10px] text-gray-400">
+                                  없음
+                                </div>
+                              )}
+                              <div className="flex flex-col items-start gap-1">
+                                <label
+                                  className={`cursor-pointer rounded border px-2 py-0.5 text-xs text-blue-700 hover:bg-blue-50 ${
+                                    photoBusyId === item.id ? 'pointer-events-none opacity-50' : ''
+                                  }`}
+                                >
+                                  {photoBusyId === item.id ? '처리 중...' : item.imageVersion ? '사진 변경' : '사진 등록'}
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    className="hidden"
+                                    disabled={photoBusyId === item.id}
+                                    onChange={(e) => {
+                                      const file = e.target.files?.[0];
+                                      e.target.value = '';
+                                      handlePhotoSelected(item.id, file);
+                                    }}
+                                  />
+                                </label>
+                                {item.imageVersion ? (
+                                  <button
+                                    type="button"
+                                    className="text-xs text-red-500 hover:underline"
+                                    disabled={photoBusyId === item.id}
+                                    onClick={() => handlePhotoDelete(item.id)}
+                                  >
+                                    사진 삭제
+                                  </button>
+                                ) : null}
+                              </div>
+                            </div>
+                          </TableCell>
                           <TableCell>{item.description || '-'}</TableCell>
                           <TableCell>{new Date(item.createdAt).toLocaleDateString()}</TableCell>
                           <TableCell className="text-right">
