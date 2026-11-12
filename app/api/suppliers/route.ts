@@ -8,6 +8,7 @@ import {
   setDefaultSupplier,
   updateSupplier,
 } from '@/lib/suppliers';
+import { listStampVersions, removeStamp } from '@/lib/supplierStamps';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,7 +18,8 @@ const fail = (error: string, status: number) => NextResponse.json({ success: fal
 export async function GET() {
   const g = await requireAdmin();
   if ('denied' in g) return g.denied;
-  return NextResponse.json({ success: true, suppliers: await listSuppliers() });
+  const [suppliers, stamps] = await Promise.all([listSuppliers(), listStampVersions()]);
+  return NextResponse.json({ success: true, suppliers: suppliers.map((s) => ({ ...s, stampVersion: stamps.get(s.id) ?? null })) });
 }
 
 // 공급자 추가
@@ -62,5 +64,7 @@ export async function DELETE(req: Request) {
   if ('denied' in g) return g.denied;
   const id = new URL(req.url).searchParams.get('id') || '';
   if (!id) return fail('공급자 ID가 필요합니다.', 400);
-  return (await deleteSupplier(id)) ? NextResponse.json({ success: true }) : fail('공급자를 찾을 수 없습니다.', 404);
+  if (!(await deleteSupplier(id))) return fail('공급자를 찾을 수 없습니다.', 404);
+  await removeStamp(id).catch((e: unknown) => console.error('공급자 직인 삭제 실패:', e));
+  return NextResponse.json({ success: true });
 }

@@ -12,6 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { toast } from 'sonner';
 import { Edit, Trash2, Plus, Users, Package, Search, Building2 } from 'lucide-react';
 import { SuppliersPanel } from '@/components/admin/suppliers-panel';
+import { BranchBusinessCell } from '@/components/admin/branch-business-cell';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { getItemTextClass } from '@/lib/itemColor';
 import { shrinkToJpeg } from '@/lib/imageUpload';
@@ -975,6 +976,7 @@ export default function AdminPage() {
                       <TableHead>아이디</TableHead>
                       <TableHead>역할</TableHead>
                       <TableHead>지점명</TableHead>
+                      <TableHead className="min-w-[200px]">사업자 정보</TableHead>
                       <TableHead>가입일</TableHead>
                       <TableHead className="text-right">관리</TableHead>
                     </TableRow>
@@ -994,6 +996,9 @@ export default function AdminPage() {
                           </span>
                         </TableCell>
                         <TableCell>{user.branchName || '-'}</TableCell>
+                        <TableCell>
+                          <BranchBusinessCell userId={user.id} userLabel={user.branchName || user.name} />
+                        </TableCell>
                         <TableCell>{new Date(user.createdAt).toLocaleDateString()}</TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">

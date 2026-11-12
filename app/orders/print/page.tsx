@@ -19,12 +19,14 @@ type PrintOrder = {
   isWingCarRestricted: boolean;
   branchName: string;
   contactName: string;
+  bizName: string;
+  bizNo: string;
   items: Line[];
   printCount: number;
   lastPrintedAt: string | null;
   lastPrintedBy: string | null;
 };
-type Supplier = { id: string; name: string; bizNo: string; ceo: string; address: string; phone: string; isDefault: boolean };
+type Supplier = { id: string; name: string; bizNo: string; ceo: string; address: string; phone: string; isDefault: boolean; stampUrl: string | null };
 
 const COPIES = ['공급자용', '공급받는자용', '회수용'] as const;
 type Copy = (typeof COPIES)[number];
@@ -85,17 +87,17 @@ const CSS = `
 .inv-copy.c2 { background:#7dd3fc; color:#000; box-shadow:inset 0 0 0 0.35mm #000; }
 .inv-sub { height:5mm; display:flex; align-items:center; gap:2mm; font-size:8.5pt; font-weight:700; }
 .inv-reprint { margin-left:auto; color:#c00; border:0.5mm solid #c00; font-size:9pt; font-weight:900; padding:0 2mm; border-radius:1mm; }
-.inv-when { height:13mm; display:flex; gap:2mm; margin-top:1mm; }
+.inv-when { height:12mm; display:flex; gap:2mm; margin-top:1mm; }
 .inv-box { border:0.4mm solid #000; border-radius:1mm; padding:0.5mm 2.5mm; display:flex; flex-direction:column; justify-content:center; box-sizing:border-box; }
 .inv-box.date { flex:55; } .inv-box.time { flex:45; border-width:0.8mm; }
 .inv-lab { font-size:6.8pt; font-weight:700; color:#444; line-height:1.1; }
 .inv-date { font-size:13.5pt; font-weight:900; line-height:1.15; white-space:nowrap; }
 .inv-time { font-size:21pt; font-weight:900; line-height:1.05; }
-.inv-wing { height:8mm; margin-top:1mm; border-radius:1mm; display:flex; align-items:center; justify-content:center; font-weight:900; box-sizing:border-box; }
+.inv-wing { height:7mm; margin-top:1mm; border-radius:1mm; display:flex; align-items:center; justify-content:center; font-weight:900; box-sizing:border-box; }
 .inv-wing.on { background:#c00; color:#fff; font-size:13pt; letter-spacing:0.4mm; }
 .inv-wing.off { border:0.3mm solid #999; color:#555; font-size:9pt; }
 .inv-party { border:0.3mm solid #000; border-radius:1mm; padding:1mm 2mm; overflow:hidden; position:relative; margin-top:1.5mm; box-sizing:border-box; }
-.inv-party.to { height:31mm; } .inv-party.from { height:21mm; }
+.inv-party.to { height:37mm; } .inv-party.from { height:21mm; }
 .inv-ptag { position:absolute; right:0; top:0; background:#000; color:#fff; font-size:6.5pt; font-weight:700; padding:0 1.6mm; border-bottom-left-radius:1mm; }
 .inv-dest { flex:1; min-width:0; font-weight:900; line-height:1.2; overflow:hidden; display:-webkit-box; -webkit-box-orient:vertical; }
 .inv-ptag.yel { background:#facc15; color:#000; box-shadow:inset 0 0 0 0.3mm #000; }
@@ -103,6 +105,8 @@ const CSS = `
 .inv-prow.top { align-items:flex-start; margin-top:0.4mm; }
 .inv-pill { flex:none; font-size:7pt; font-weight:900; background:#e5e7eb; border:0.25mm solid #777; border-radius:0.8mm; padding:0 1.4mm; line-height:1.55; white-space:nowrap; }
 .inv-pill.dark { background:#000; color:#fff; border-color:#000; }
+.inv-biz { font-size:11pt; font-weight:900; line-height:1.2; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.inv-stamp { position:absolute; right:3mm; bottom:0.4mm; width:17mm; height:17mm; object-fit:contain; mix-blend-mode:multiply; opacity:0.95; pointer-events:none; z-index:2; }
 .inv-branch { font-size:12.5pt; font-weight:900; line-height:1.2; white-space:nowrap; }
 .inv-contact { font-size:9pt; font-weight:600; color:#333; white-space:nowrap; }
 .inv-sm { font-size:8.5pt; line-height:1.25; }
@@ -125,10 +129,10 @@ const CSS = `
 .inv-chk { flex:none; border:0.6mm solid #000; box-sizing:border-box; }
 .inv-row.compact .inv-chk { margin-right:1mm; }
 .inv-foot { margin-top:1.5mm; }
-.inv-memo { height:22mm; border:0.4mm solid #000; border-radius:1mm; padding:1mm 2mm; overflow:hidden; box-sizing:border-box; }
+.inv-memo { height:20mm; border:0.4mm solid #000; border-radius:1mm; padding:1mm 2mm; overflow:hidden; box-sizing:border-box; }
 .inv-memo b { font-size:7pt; background:#000; color:#fff; padding:0 1.4mm; border-radius:0.6mm; margin-right:1.2mm; vertical-align:1px; }
 .inv-memotext { font-size:9.5pt; font-weight:800; line-height:1.2; display:-webkit-box; -webkit-line-clamp:4; -webkit-box-orient:vertical; overflow:hidden; }
-.inv-sign { height:28mm; margin-top:1.5mm; border:0.3mm solid #000; border-radius:1mm; padding:0.8mm 2mm; font-size:8.5pt; line-height:1.55; overflow:hidden; box-sizing:border-box; }
+.inv-sign { height:25mm; margin-top:1.5mm; border:0.3mm solid #000; border-radius:1mm; padding:0.8mm 2mm; font-size:8.5pt; line-height:1.55; overflow:hidden; box-sizing:border-box; }
 .inv-sign.strong { border-width:0.6mm; }
 .inv-sign .note { font-size:7pt; color:#444; line-height:1.3; }
 .inv-line { display:inline-block; border-bottom:0.25mm solid #000; min-width:20mm; height:3.6mm; vertical-align:bottom; }
@@ -221,6 +225,11 @@ function Slot({
           <span className="inv-branch">{order.branchName || '-'}</span>
           {order.contactName && order.contactName !== order.branchName && <span className="inv-contact">{order.contactName}</span>}
         </div>
+        <div className="inv-prow">
+          <span className="inv-pill">사업자</span>
+          <span className="inv-biz">{order.bizName || '-'}</span>
+          {order.bizNo && <span className="inv-contact">{order.bizNo}</span>}
+        </div>
         <div className="inv-prow top">
           <span className="inv-pill dark">하차지</span>
           <div className="inv-dest" style={{ fontSize: `${destPt}pt`, WebkitLineClamp: 2 }}>{order.destination || '-'}</div>
@@ -230,6 +239,7 @@ function Slot({
       </div>
       <div className="inv-party from">
         <span className="inv-ptag">공급자</span>
+        {supplier.stampUrl && <img className="inv-stamp" src={supplier.stampUrl} alt="직인" />}
         <div className="inv-sup-name">{supplier.name}</div>
         <div className="inv-sm">{supplier.bizNo ? `사업자 ${supplier.bizNo}` : ' '}</div>
         <div className="inv-sm inv-clamp" style={{ WebkitLineClamp: 2 }}>{supplier.address || ' '}</div>

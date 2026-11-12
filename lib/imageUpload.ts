@@ -28,3 +28,36 @@ export async function shrinkToJpeg(file: File, maxSide = 640): Promise<Blob> {
   }
   throw new Error('사진 용량을 줄이지 못했습니다. 더 작은 사진을 사용해 주세요.');
 }
+
+// 직인(법인 도장)용: 투명 배경을 유지한 채 작은 PNG로 바꾼다 (서버 업로드 한도 안쪽)
+export async function shrinkToPng(file: File, maxSide = 400): Promise<Blob> {
+  if (!file.type.startsWith('image/')) throw new Error('이미지 파일을 선택해 주세요.');
+
+  let bitmap: ImageBitmap;
+  try {
+    bitmap = await createImageBitmap(file);
+  } catch {
+    throw new Error('이 이미지 형식은 읽을 수 없습니다. PNG, JPG, WEBP 이미지를 사용해 주세요.');
+  }
+
+  let side = maxSide;
+  for (let i = 0; i < 6; i++) {
+    const scale = Math.min(1, side / Math.max(bitmap.width, bitmap.height));
+    const w = Math.max(1, Math.round(bitmap.width * scale));
+    const h = Math.max(1, Math.round(bitmap.height * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('이미지를 변환하지 못했습니다.');
+    ctx.drawImage(bitmap, 0, 0, w, h); // 배경을 칠하지 않아 투명 부분이 그대로 남는다
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
+    if (blob && blob.size <= 290 * 1024) {
+      bitmap.close?.();
+      return blob;
+    }
+    side = Math.round(side * 0.75);
+  }
+  bitmap.close?.();
+  throw new Error('직인 이미지 용량을 줄이지 못했습니다. 더 단순한 이미지를 사용해 주세요.');
+}

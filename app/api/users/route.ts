@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 import { prisma } from '@/lib/prisma';
 import { hash } from 'bcrypt';
+import { removeBranchBusiness } from '@/lib/branchBusiness';
 
 // 회원 목록 조회 API
 export async function GET(req: Request) {
@@ -324,6 +325,7 @@ export async function DELETE(req: Request) {
     await prisma.user.delete({
       where: { id },
     });
+    await removeBranchBusiness(id).catch((e: unknown) => console.error('지점 사업자 정보 삭제 실패:', e));
     
     return NextResponse.json({ 
       success: true, 

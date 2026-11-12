@@ -4,6 +4,8 @@ import { prisma } from '@/lib/prisma';
 import { listImageVersions, isValidItemId } from '@/lib/itemImages';
 import { listSuppliers } from '@/lib/suppliers';
 import { printInfo } from '@/lib/invoiceLog';
+import { getAllBranchBusiness } from '@/lib/branchBusiness';
+import { listStampVersions } from '@/lib/supplierStamps';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,7 +24,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ success: false, error: '주문 목록이 올바르지 않습니다.' }, { status: 400 });
     }
 
-    const [orders, items, versions, suppliers, prints] = await Promise.all([
+    const [orders, items, versions, suppliers, prints, bizMap, stamps] = await Promise.all([
       prisma.order.findMany({
         where: { id: { in: ids } },
         include: { orderItems: true, user: { select: { name: true, branchName: true } } },
@@ -31,6 +33,8 @@ export async function GET(req: Request) {
       listImageVersions(),
       listSuppliers(),
       printInfo(ids),
+      getAllBranchBusiness(),
+      listStampVersions(),
     ]);
 
     // 품목명 → 사진 주소 (주문 품목에는 이름만 저장되어 있으므로 품목 목록과 이름으로 연결)
@@ -58,6 +62,8 @@ export async function GET(req: Request) {
           status: o.status,
           branchName: o.user?.branchName || o.user?.name || '',
           contactName: o.user?.name || '',
+          bizName: bizMap[o.userId]?.bizName || '',
+          bizNo: bizMap[o.userId]?.bizNo || '',
           items: (o.orderItems as any[])
             .slice()
             .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
@@ -69,7 +75,8 @@ export async function GET(req: Request) {
       });
 
     if (result.length === 0) return NextResponse.json({ success: false, error: '주문을 찾을 수 없습니다.' }, { status: 404 });
-    return NextResponse.json({ success: true, orders: result, suppliers });
+    const suppliersOut = suppliers.map((s) => ({ ...s, stampUrl: stamps.has(s.id) ? `/supplier-stamp/${s.id}?v=${stamps.get(s.id)}` : null }));
+    return NextResponse.json({ success: true, orders: result, suppliers: suppliersOut });
   } catch (error) {
     console.error('송장 자료 조회 오류:', error);
     return NextResponse.json({ success: false, error: '송장 자료를 불러오지 못했습니다.' }, { status: 500 });

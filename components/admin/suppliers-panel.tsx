@@ -8,8 +8,9 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { shrinkToPng } from '@/lib/imageUpload';
 
-type Supplier = { id: string; name: string; bizNo: string; ceo: string; address: string; phone: string; isDefault: boolean };
+type Supplier = { id: string; name: string; bizNo: string; ceo: string; address: string; phone: string; isDefault: boolean; stampVersion?: number | null };
 type Form = { name: string; bizNo: string; ceo: string; address: string; phone: string };
 const EMPTY: Form = { name: '', bizNo: '', ceo: '', address: '', phone: '' };
 
@@ -29,6 +30,7 @@ export function SuppliersPanel() {
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState<Form>(EMPTY);
   const [saving, setSaving] = useState(false);
+  const [stampBusyId, setStampBusyId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -84,6 +86,40 @@ export function SuppliersPanel() {
     catch (e: any) { toast.error(e.message); }
   };
 
+  // 직인(법인 도장) 등록/변경 — 브라우저에서 투명 배경 PNG로 줄여 올림
+  const onStampSelected = async (s: Supplier, file: File | undefined) => {
+    if (!file) return;
+    setStampBusyId(s.id);
+    try {
+      const blob = await shrinkToPng(file);
+      const res = await fetch(`/api/suppliers/${s.id}/stamp`, { method: 'PUT', headers: { 'Content-Type': 'image/png' }, body: blob });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json?.success) throw new Error(json?.error || '직인을 올리지 못했습니다.');
+      toast.success('직인이 저장되었습니다.');
+      await load();
+    } catch (e: any) {
+      toast.error(e.message || '직인을 올리지 못했습니다.');
+    } finally {
+      setStampBusyId(null);
+    }
+  };
+
+  const onStampDelete = async (s: Supplier) => {
+    if (!confirm(`"${s.name}"의 직인을 삭제하시겠습니까?`)) return;
+    setStampBusyId(s.id);
+    try {
+      const res = await fetch(`/api/suppliers/${s.id}/stamp`, { method: 'DELETE' });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json?.success) throw new Error(json?.error || '직인을 삭제하지 못했습니다.');
+      toast.success('직인이 삭제되었습니다.');
+      await load();
+    } catch (e: any) {
+      toast.error(e.message || '직인을 삭제하지 못했습니다.');
+    } finally {
+      setStampBusyId(null);
+    }
+  };
+
   const remove = async (s: Supplier) => {
     if (!confirm(`"${s.name}" 공급자를 삭제하시겠습니까?`)) return;
     try { await call('DELETE', undefined, `?id=${encodeURIComponent(s.id)}`); toast.success('삭제되었습니다.'); await load(); }
@@ -114,6 +150,7 @@ export function SuppliersPanel() {
                   <TableHead className="w-[90px]">대표자</TableHead>
                   <TableHead>주소</TableHead>
                   <TableHead className="w-[130px]">전화</TableHead>
+                  <TableHead className="w-[170px]">직인(법인 도장)</TableHead>
                   <TableHead className="w-[150px] text-right">관리</TableHead>
                 </TableRow>
               </TableHeader>
@@ -128,6 +165,44 @@ export function SuppliersPanel() {
                     <TableCell>{s.ceo || '-'}</TableCell>
                     <TableCell>{s.address || '-'}</TableCell>
                     <TableCell>{s.phone || '-'}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        {s.stampVersion ? (
+                          <img
+                            src={`/supplier-stamp/${s.id}?v=${s.stampVersion}`}
+                            alt={`${s.name} 직인`}
+                            className="h-12 w-12 rounded border bg-white object-contain"
+                          />
+                        ) : (
+                          <div className="flex h-12 w-12 items-center justify-center rounded border border-dashed text-[10px] text-gray-400">없음</div>
+                        )}
+                        <div className="flex flex-col items-start gap-1">
+                          <label
+                            className={`cursor-pointer rounded border px-2 py-0.5 text-xs text-blue-700 hover:bg-blue-50 ${
+                              stampBusyId === s.id ? 'pointer-events-none opacity-50' : ''
+                            }`}
+                          >
+                            {stampBusyId === s.id ? '처리 중...' : s.stampVersion ? '직인 변경' : '직인 등록'}
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              disabled={stampBusyId === s.id}
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                e.target.value = '';
+                                onStampSelected(s, file);
+                              }}
+                            />
+                          </label>
+                          {s.stampVersion ? (
+                            <button type="button" className="text-xs text-red-500 hover:underline" disabled={stampBusyId === s.id} onClick={() => onStampDelete(s)}>
+                              직인 삭제
+                            </button>
+                          ) : null}
+                        </div>
+                      </div>
+                    </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1">
                         <Button variant="ghost" size="icon" title="기본 공급자로 지정" disabled={s.isDefault} onClick={() => makeDefault(s)}>
