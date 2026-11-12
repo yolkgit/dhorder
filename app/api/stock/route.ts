@@ -10,11 +10,15 @@ export const dynamic = 'force-dynamic';
 // 이름 비교용: 대소문자·공백·괄호·하이픈 등을 무시 (생산관리 앱의 품명 연결 규칙과 같음)
 const norm = (s: string) => String(s || '').toLowerCase().replace(/[\s()\[\]_\-.]/g, '');
 
-// 재고확인 창에 표시할 제품별 금일재고(생산일보 기준) + 품목 사진 — 로그인한 사용자만 조회 가능
+// 재고확인 창에 표시할 제품별 금일재고(생산일보 기준) + 품목 사진 — 본사·관리자(ADMIN)만 조회 가능
+// 조회할 때마다 생산관리 앱이 오더를 다시 불러와 최신 출고를 반영한다.
 export async function GET() {
   const session = await getServerSession(authOptions);
   if (!session?.user) {
     return NextResponse.json({ ok: false, error: '인증이 필요합니다.' }, { status: 401 });
+  }
+  if (session.user.role !== 'ADMIN') {
+    return NextResponse.json({ ok: false, error: '본사·관리자만 볼 수 있습니다.' }, { status: 403 });
   }
 
   try {

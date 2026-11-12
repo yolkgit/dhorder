@@ -13,10 +13,12 @@ export type ErpStockItem = {
 export type ErpStock = {
   date: string;
   synced_at: string;
+  sync_error: string;
+  sync: { ok: boolean; changed?: boolean; skipped?: boolean; error?: string } | null;
   items: ErpStockItem[];
 };
 
-const FRESH_MS = 30_000;        // 이 시간 안에는 다시 묻지 않고 저장해 둔 값 사용 (접속자가 많아도 생산관리 앱에 부담 없게)
+const FRESH_MS = 5_000;         // 이 시간 안에는 다시 묻지 않고 저장해 둔 값 사용 (동시에 여러 명이 열어도 오더 조회가 몰리지 않게)
 const STALE_OK_MS = 10 * 60_000; // 조회가 실패해도 이 시간까지는 마지막 값을 보여줌
 
 let cache: { at: number; data: ErpStock } | null = null;
@@ -34,9 +36,10 @@ export async function fetchErpStock(): Promise<ErpStock> {
 
   inflight = (async () => {
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 4000);
+    const timer = setTimeout(() => ctrl.abort(), 10000); // 오더 불러오기까지 하므로 넉넉히
     try {
-      const res = await fetch(`${base.replace(/\/$/, '')}/api/stock/summary`, {
+      // sync=1: 생산관리 앱이 응답 전에 오더시스템에서 오늘 출고를 다시 불러온다 (일보의 '오더 불러오기'와 같음)
+      const res = await fetch(`${base.replace(/\/$/, '')}/api/stock/summary?sync=1`, {
         headers: { 'x-stock-token': token },
         cache: 'no-store',
         signal: ctrl.signal,
@@ -46,6 +49,11 @@ export async function fetchErpStock(): Promise<ErpStock> {
       const data: ErpStock = {
         date: String(j?.date || ''),
         synced_at: String(j?.synced_at || ''),
+        sync_error: String(j?.sync_error || ''),
+        sync:
+          j?.sync && typeof j.sync === 'object'
+            ? { ok: !!j.sync.ok, changed: j.sync.changed, skipped: j.sync.skipped, error: j.sync.error ? String(j.sync.error) : undefined }
+            : null,
         items: Array.isArray(j?.items)
           ? j.items.map((it: any) => ({
               name: String(it?.name || ''),

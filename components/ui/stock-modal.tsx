@@ -14,13 +14,19 @@ type StockItem = {
   sale_today: number;
   imageUrl: string | null;
 };
-type StockData = { date: string; synced_at: string; items: StockItem[] };
+type StockData = {
+  date: string;
+  synced_at: string;
+  sync_error?: string;
+  sync?: { ok: boolean } | null;
+  items: StockItem[];
+};
 
 const fmt = (n: number) => n.toLocaleString('ko-KR');
 
 // 헤더의 '재고확인' 버튼과, 누르면 열리는 제품별 금일재고 창 (생산일보 기준, 품목 사진 표시)
 export function StockModal() {
-  const { status } = useSession();
+  const { status, data: session } = useSession();
   const [open, setOpen] = useState(false);
   const [data, setData] = useState<StockData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -46,7 +52,8 @@ export function StockModal() {
     if (open) load();
   }, [open, load]);
 
-  if (status !== 'authenticated') return null;
+  // 본사·관리자(ADMIN)에게만 보인다 (서버 /api/stock 도 같은 조건으로 막혀 있음)
+  if (status !== 'authenticated' || session?.user?.role !== 'ADMIN') return null;
 
   const md = data ? data.date.slice(5).replace('-', '/') : '';
   return (
@@ -92,6 +99,12 @@ export function StockModal() {
             <div className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
               {error}
               {data ? ' (이전에 불러온 값을 표시 중입니다)' : ''}
+            </div>
+          )}
+
+          {data && (data.sync_error || (data.sync && !data.sync.ok)) && (
+            <div className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              최신 오더를 불러오지 못해, 마지막으로 반영된 시각{data.synced_at ? `(${data.synced_at.slice(11, 16)})` : ''} 기준 재고입니다.
             </div>
           )}
 
