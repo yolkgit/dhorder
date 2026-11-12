@@ -57,6 +57,7 @@ export async function GET(req: Request) {
           isWingCarRestricted: !!o.isWingCarRestricted,
           status: o.status,
           branchName: o.user?.branchName || o.user?.name || '',
+          contactName: o.user?.name || '',
           items: (o.orderItems as any[])
             .slice()
             .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())

@@ -18,6 +18,7 @@ type PrintOrder = {
   memo: string | null;
   isWingCarRestricted: boolean;
   branchName: string;
+  contactName: string;
   items: Line[];
   printCount: number;
   lastPrintedAt: string | null;
@@ -30,7 +31,7 @@ type Copy = (typeof COPIES)[number];
 
 // A4 가로(297×210mm)를 좌우 3칸으로 나눈다: 한 칸 99×210mm. 한 칸에 품목은 최대 5줄, 넘으면 다음 장으로 이어서 출력한다.
 const MAX_LINES = 5;
-const ROWS_MM = 52; // 품목 줄이 쓸 수 있는 높이(mm)
+const ROWS_MM = 47; // 품목 줄이 쓸 수 있는 높이(mm)
 const INNER_MM = 90.8; // 한 칸 안쪽 너비(mm)
 // 품목 개수별 크기: 1~2개는 사진을 크게(사진 왼쪽, 품명·수량 오른쪽), 3개 이상은 한 줄로 compact
 const GEOM: Record<number, { photo: number; name: number; qty: number; box: number; cap: number }> = {
@@ -80,6 +81,8 @@ const CSS = `
 .inv-head { height:9mm; display:flex; align-items:center; justify-content:space-between; }
 .inv-title { font-size:15pt; font-weight:900; letter-spacing:1mm; white-space:nowrap; }
 .inv-copy { background:#000; color:#fff; font-size:11pt; font-weight:900; padding:1mm 3mm; border-radius:1mm; white-space:nowrap; }
+.inv-copy.c1 { background:#facc15; color:#000; box-shadow:inset 0 0 0 0.35mm #000; }
+.inv-copy.c2 { background:#7dd3fc; color:#000; box-shadow:inset 0 0 0 0.35mm #000; }
 .inv-sub { height:5mm; display:flex; align-items:center; gap:2mm; font-size:8.5pt; font-weight:700; }
 .inv-reprint { margin-left:auto; color:#c00; border:0.5mm solid #c00; font-size:9pt; font-weight:900; padding:0 2mm; border-radius:1mm; }
 .inv-when { height:13mm; display:flex; gap:2mm; margin-top:1mm; }
@@ -92,9 +95,16 @@ const CSS = `
 .inv-wing.on { background:#c00; color:#fff; font-size:13pt; letter-spacing:0.4mm; }
 .inv-wing.off { border:0.3mm solid #999; color:#555; font-size:9pt; }
 .inv-party { border:0.3mm solid #000; border-radius:1mm; padding:1mm 2mm; overflow:hidden; position:relative; margin-top:1.5mm; box-sizing:border-box; }
-.inv-party.to { height:26mm; } .inv-party.from { height:21mm; }
+.inv-party.to { height:31mm; } .inv-party.from { height:21mm; }
 .inv-ptag { position:absolute; right:0; top:0; background:#000; color:#fff; font-size:6.5pt; font-weight:700; padding:0 1.6mm; border-bottom-left-radius:1mm; }
-.inv-dest { font-weight:900; line-height:1.2; overflow:hidden; padding-right:14mm; display:-webkit-box; -webkit-box-orient:vertical; }
+.inv-dest { flex:1; min-width:0; font-weight:900; line-height:1.2; overflow:hidden; display:-webkit-box; -webkit-box-orient:vertical; }
+.inv-ptag.yel { background:#facc15; color:#000; box-shadow:inset 0 0 0 0.3mm #000; }
+.inv-prow { display:flex; align-items:center; gap:1.5mm; min-height:5.5mm; }
+.inv-prow.top { align-items:flex-start; margin-top:0.4mm; }
+.inv-pill { flex:none; font-size:7pt; font-weight:900; background:#e5e7eb; border:0.25mm solid #777; border-radius:0.8mm; padding:0 1.4mm; line-height:1.55; white-space:nowrap; }
+.inv-pill.dark { background:#000; color:#fff; border-color:#000; }
+.inv-branch { font-size:12.5pt; font-weight:900; line-height:1.2; white-space:nowrap; }
+.inv-contact { font-size:9pt; font-weight:600; color:#333; white-space:nowrap; }
 .inv-sm { font-size:8.5pt; line-height:1.25; }
 .inv-clamp { display:-webkit-box; -webkit-box-orient:vertical; overflow:hidden; }
 .inv-sup-name { font-size:11pt; font-weight:900; padding-right:14mm; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -184,13 +194,13 @@ function Slot({
   const totalBags = order.items.reduce((s, i) => s + (i.quantity || 0), 0);
   // 하차지 이름 길이에 따라 글자 크기를 조절 (짧으면 크게, 길면 줄여서 2줄 안에)
   const destLen = (order.destination || '').length;
-  const destPt = destLen <= 9 ? 16 : destLen <= 15 ? 14 : destLen <= 22 ? 12 : 10.5;
+  const destPt = destLen <= 9 ? 15 : destLen <= 14 ? 13 : destLen <= 20 ? 11.5 : 10;
 
   return (
     <div className="inv-slot">
       <div className="inv-head">
         <span className="inv-title">출 고 지 시 서</span>
-        <span className="inv-copy">{copy}</span>
+        <span className={`inv-copy c${COPIES.indexOf(copy)}`}>{copy}</span>
       </div>
       <div className="inv-sub">
         <span>No. {invoiceNo(order)}</span>
@@ -205,13 +215,18 @@ function Slot({
       {order.isWingCarRestricted ? <div className="inv-wing on">⚠ 윙카 불가</div> : <div className="inv-wing off">윙카 가능</div>}
 
       <div className="inv-party to">
-        <span className="inv-ptag">공급받는자</span>
-        <div className="inv-dest" style={{ fontSize: `${destPt}pt`, WebkitLineClamp: 2 }}>{order.destination || '-'}</div>
-        <div className="inv-sm inv-clamp" style={{ WebkitLineClamp: 3 }}>{order.address || '-'}</div>
-        <div className="inv-sm" style={{ fontWeight: 800, display: 'flex', justifyContent: 'space-between' }}>
-          <span>☎ {order.phoneNumber || '-'}</span>
-          <span style={{ fontWeight: 600, color: '#444' }}>접수 {order.branchName || '-'}</span>
+        <span className="inv-ptag yel">공급받는자</span>
+        <div className="inv-prow" style={{ paddingRight: '16mm' }}>
+          <span className="inv-pill">지점</span>
+          <span className="inv-branch">{order.branchName || '-'}</span>
+          {order.contactName && order.contactName !== order.branchName && <span className="inv-contact">{order.contactName}</span>}
         </div>
+        <div className="inv-prow top">
+          <span className="inv-pill dark">하차지</span>
+          <div className="inv-dest" style={{ fontSize: `${destPt}pt`, WebkitLineClamp: 2 }}>{order.destination || '-'}</div>
+        </div>
+        <div className="inv-sm inv-clamp" style={{ WebkitLineClamp: 2 }}>{order.address || '-'}</div>
+        <div className="inv-sm" style={{ fontWeight: 800 }}>☎ {order.phoneNumber || '-'}</div>
       </div>
       <div className="inv-party from">
         <span className="inv-ptag">공급자</span>
