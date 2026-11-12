@@ -419,6 +419,128 @@ const OrderAnalyticsTable = ({ orders }: { orders: any[] }) => {
   );
 };
 
+// ===== 열 필터(지점명·하차지·품목 중 특정 항목 선택) / 텍스트 열 정렬 =====
+type ColumnFilter = { branch: string; destination: string; item: string };
+type FilterOption = { value: string; count: number };
+const EMPTY_FILTER: ColumnFilter = { branch: '', destination: '', item: '' };
+
+const getBranchLabel = (order: any): string => order?.user?.branchName || order?.user?.name || '정보 없음';
+const getOrderItemNames = (order: any): string[] =>
+  Array.isArray(order?.items) ? order.items.map((i: any) => i?.itemName).filter(Boolean) : [];
+const getDestinationLabel = (order: any): string => (order?.destination || '').trim();
+const getDestinationSortKey = getDestinationLabel;
+const getItemSortKey = (order: any): string => getOrderItemNames(order).join(', ');
+
+const isFilterActive = (f: ColumnFilter) => !!(f.branch || f.destination.trim() || f.item);
+
+const matchesFilter = (order: any, f: ColumnFilter) =>
+  (!f.branch || getBranchLabel(order) === f.branch) &&
+  (!f.destination.trim() || getDestinationLabel(order).toLowerCase().includes(f.destination.trim().toLowerCase())) &&
+  (!f.item || getOrderItemNames(order).includes(f.item));
+
+const countOptions = (values: string[]): FilterOption[] => {
+  const counts = new Map<string, number>();
+  values.forEach((v) => counts.set(v, (counts.get(v) || 0) + 1));
+  return Array.from(counts.entries())
+    .map(([value, count]) => ({ value, count }))
+    .sort((a, b) => a.value.localeCompare(b.value, 'ko'));
+};
+
+const buildFilterOptions = (orders: any[]) => ({
+  branches: countOptions(orders.map(getBranchLabel)),
+  destinations: countOptions(orders.map(getDestinationLabel).filter(Boolean)),
+  items: countOptions(orders.flatMap((o) => Array.from(new Set(getOrderItemNames(o))))),
+});
+
+// 텍스트 열 정렬: 세 번째 클릭 상태(createdAt)는 주문일시 최신순으로 되돌림
+const compareByText = (
+  a: any,
+  b: any,
+  getKey: (o: any) => string,
+  direction: 'asc' | 'desc' | 'createdAt'
+) => {
+  if (direction === 'createdAt') {
+    return new Date(b?.createdAt || 0).getTime() - new Date(a?.createdAt || 0).getTime();
+  }
+  const r = getKey(a).localeCompare(getKey(b), 'ko');
+  return direction === 'asc' ? r : -r;
+};
+
+// 열 머리 아래의 '특정 항목 선택' 상자
+const ColumnFilterSelect = ({
+  label,
+  value,
+  options,
+  onChange,
+  colorize,
+}: {
+  label: string;
+  value: string;
+  options: FilterOption[];
+  onChange: (value: string) => void;
+  colorize?: boolean;
+}) => {
+  // 선택해 둔 항목이 데이터에서 사라져도 상자에는 계속 보이도록 유지
+  const shown = value && !options.some((o) => o.value === value) ? [...options, { value, count: 0 }] : options;
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      onClick={(e) => e.stopPropagation()}
+      title={`${label} 선택`}
+      aria-label={`${label} 선택`}
+      className={`w-full min-w-0 h-6 text-xs rounded border px-0.5 font-normal ${
+        value ? 'bg-yellow-100 border-yellow-400 font-semibold' : 'bg-white border-gray-300'
+      } ${colorize ? getItemTextClass(value) : ''}`}
+    >
+      <option value="">전체</option>
+      {shown.map((o) => (
+        <option key={o.value} value={o.value} className={colorize ? getItemTextClass(o.value) : ''}>
+          {o.value} ({o.count})
+        </option>
+      ))}
+    </select>
+  );
+};
+
+// 하차지처럼 항목이 많은 열: 글자를 입력해 좁히거나 목록에서 선택 (입력한 글자가 포함된 하차지를 모두 표시)
+const ColumnFilterCombo = ({
+  label,
+  value,
+  options,
+  onChange,
+  listId,
+}: {
+  label: string;
+  value: string;
+  options: FilterOption[];
+  onChange: (value: string) => void;
+  listId: string;
+}) => (
+  <>
+    <input
+      type="text"
+      list={listId}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      onClick={(e) => e.stopPropagation()}
+      placeholder="전체"
+      title={`${label}: 글자를 입력하거나 목록에서 선택`}
+      aria-label={`${label} 선택`}
+      className={`w-full min-w-0 h-6 text-xs rounded border px-1 font-normal ${
+        value.trim() ? 'bg-yellow-100 border-yellow-400 font-semibold' : 'bg-white border-gray-300'
+      }`}
+    />
+    <datalist id={listId}>
+      {options.map((o) => (
+        <option key={o.value} value={o.value}>
+          {o.count}건
+        </option>
+      ))}
+    </datalist>
+  </>
+);
+
 export default function OrdersPage() {
   const router = useRouter();
   const { data: session, status } = useSession();
@@ -515,6 +637,10 @@ export default function OrdersPage() {
     return 'desc';
   });
 
+  // 열 필터 상태 (저장하지 않음: 새로고침하면 전체 보기로 돌아가, 필터를 잊고 주문을 놓치는 일을 막음)
+  const [todayFilter, setTodayFilter] = useState<ColumnFilter>(EMPTY_FILTER);
+  const [listFilter, setListFilter] = useState<ColumnFilter>(EMPTY_FILTER);
+
   // 참조 변수들 정의
   const isFirstRender = useRef(true);
   const isInitialDataLoadedRef = useRef(false);
@@ -544,11 +670,25 @@ export default function OrdersPage() {
       return deliveryDate.getTime() >= today.getTime();
     }), [todayOrders, today]);
 
+  // 열 필터 적용 결과와 선택 가능한 항목 목록
+  const todayFilterOptions = useMemo(() => buildFilterOptions(currentAndFutureOrders), [currentAndFutureOrders]);
+  const listFilterOptions = useMemo(() => buildFilterOptions(orders), [orders]);
+  const todayFilterActive = isFilterActive(todayFilter);
+  const listFilterActive = isFilterActive(listFilter);
+  const filteredCurrentAndFutureOrders = useMemo(
+    () => currentAndFutureOrders.filter((order) => matchesFilter(order, todayFilter)),
+    [currentAndFutureOrders, todayFilter]
+  );
+  const filteredOrders = useMemo(
+    () => orders.filter((order) => matchesFilter(order, listFilter)),
+    [orders, listFilter]
+  );
+
   // 정렬된 주문 목록 계산
   const sortedOrders = useMemo(() => {
-    if (!orders.length) return [];
+    if (!filteredOrders.length) return [];
     
-    return [...orders].sort((a, b) => {
+    return [...filteredOrders].sort((a, b) => {
       if (sortField === 'deliveryDate') {
         if (sortDirection === 'createdAt') {
           // 주문일시 기준 정렬
@@ -573,16 +713,20 @@ export default function OrdersPage() {
         return sortDirection === 'asc'
           ? branchNameA.localeCompare(branchNameB)
           : branchNameB.localeCompare(branchNameA);
+      } else if (sortField === 'destination') {
+        return compareByText(a, b, getDestinationSortKey, sortDirection);
+      } else if (sortField === 'itemName') {
+        return compareByText(a, b, getItemSortKey, sortDirection);
       }
       return 0;
     });
-  }, [orders, sortField, sortDirection]);
+  }, [filteredOrders, sortField, sortDirection]);
 
   // 정렬된 오늘 이후 주문 목록 계산
   const sortedCurrentAndFutureOrders = useMemo(() => {
-    if (!currentAndFutureOrders.length) return [];
+    if (!filteredCurrentAndFutureOrders.length) return [];
     
-    return [...currentAndFutureOrders].sort((a, b) => {
+    return [...filteredCurrentAndFutureOrders].sort((a, b) => {
       if (todayOrdersSortField === 'deliveryDate') {
         if (todayOrdersSortDirection === 'createdAt') {
           // 주문일시 기준 정렬
@@ -612,10 +756,14 @@ export default function OrdersPage() {
         const createdAtA = new Date(a.createdAt || 0).getTime();
         const createdAtB = new Date(b.createdAt || 0).getTime();
         return todayOrdersSortDirection === 'asc' ? createdAtA - createdAtB : createdAtB - createdAtA;
+      } else if (todayOrdersSortField === 'destination') {
+        return compareByText(a, b, getDestinationSortKey, todayOrdersSortDirection);
+      } else if (todayOrdersSortField === 'itemName') {
+        return compareByText(a, b, getItemSortKey, todayOrdersSortDirection);
       }
       return 0;
     });
-  }, [currentAndFutureOrders, todayOrdersSortField, todayOrdersSortDirection]);
+  }, [filteredCurrentAndFutureOrders, todayOrdersSortField, todayOrdersSortDirection]);
 
   // 오늘 이후 주문 데이터 불러오기 (별도 함수)
   const fetchTodayOrders = useCallback(async (forceTimestamp?: number, isBackground = false) => {
@@ -1286,7 +1434,7 @@ export default function OrdersPage() {
             <Calendar className="mr-1.5 h-4 w-4" />
             금일 주문 상태
             <span className="ml-2 text-xs text-gray-500">
-              (총 {currentAndFutureOrders.length}건)
+              (총 {currentAndFutureOrders.length}건{todayFilterActive ? ` 중 ${sortedCurrentAndFutureOrders.length}건 표시` : ''})
             </span>
           </CardTitle>
         </CardHeader>
@@ -1315,12 +1463,53 @@ export default function OrdersPage() {
                       납품일자
                       <SortIcon field="deliveryDate" currentField={todayOrdersSortField} direction={todayOrdersSortDirection} />
                     </TableHead>
-                    <TableHead className="w-28 text-center py-0.5 px-0.5">지점명</TableHead>
-                    <TableHead className="w-28 text-center py-0.5 px-0.5">하차지</TableHead>
+                    <TableHead 
+                      className="w-28 text-center py-0.5 px-0.5 cursor-pointer hover:bg-gray-100"
+                      onClick={() => handleTodayOrdersSort('branchName')}
+                    >
+                      지점명
+                      <SortIcon field="branchName" currentField={todayOrdersSortField} direction={todayOrdersSortDirection} />
+                    </TableHead>
+                    <TableHead 
+                      className="w-28 text-center py-0.5 px-0.5 cursor-pointer hover:bg-gray-100"
+                      onClick={() => handleTodayOrdersSort('destination')}
+                    >
+                      하차지
+                      <SortIcon field="destination" currentField={todayOrdersSortField} direction={todayOrdersSortDirection} />
+                    </TableHead>
                     <TableHead className="w-32 text-center py-0.5 px-0.5">메모</TableHead>
-                    <TableHead className="w-32 text-center py-0.5 px-0.5">품목</TableHead>
+                    <TableHead 
+                      className="w-32 text-center py-0.5 px-0.5 cursor-pointer hover:bg-gray-100"
+                      onClick={() => handleTodayOrdersSort('itemName')}
+                    >
+                      품목
+                      <SortIcon field="itemName" currentField={todayOrdersSortField} direction={todayOrdersSortDirection} />
+                    </TableHead>
                     <TableHead className="w-20 text-center py-0.5 px-0.5">수량</TableHead>
                     <TableHead className="w-20 text-center py-0.5 px-0.5">관리</TableHead>
+                  </TableRow>
+                  <TableRow className="bg-gray-50 hover:bg-gray-50">
+                    <TableHead className="h-8 py-0.5 px-0.5" />
+                    <TableHead className="h-8 py-0.5 px-0.5" />
+                    <TableHead className="h-8 py-0.5 px-0.5" />
+                    <TableHead className="h-8 py-0.5 px-0.5">
+                      <ColumnFilterSelect label="지점명" value={todayFilter.branch} options={todayFilterOptions.branches} onChange={(v) => setTodayFilter((f) => ({ ...f, branch: v }))} />
+                    </TableHead>
+                    <TableHead className="h-8 py-0.5 px-0.5">
+                      <ColumnFilterCombo label="하차지" listId="today-destination-options" value={todayFilter.destination} options={todayFilterOptions.destinations} onChange={(v) => setTodayFilter((f) => ({ ...f, destination: v }))} />
+                    </TableHead>
+                    <TableHead className="h-8 py-0.5 px-0.5" />
+                    <TableHead className="h-8 py-0.5 px-0.5">
+                      <ColumnFilterSelect label="품목" colorize value={todayFilter.item} options={todayFilterOptions.items} onChange={(v) => setTodayFilter((f) => ({ ...f, item: v }))} />
+                    </TableHead>
+                    <TableHead className="h-8 py-0.5 px-0.5" />
+                    <TableHead className="h-8 py-0.5 px-0.5 text-center">
+                      {todayFilterActive && (
+                        <button type="button" onClick={() => setTodayFilter(EMPTY_FILTER)} className="text-xs text-blue-700 underline">
+                          필터 해제
+                        </button>
+                      )}
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1382,6 +1571,13 @@ export default function OrdersPage() {
                       </TableCell>
                     </TableRow>
                   ))}
+                  {sortedCurrentAndFutureOrders.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={9} className="text-center py-4 text-sm text-gray-500">
+                        선택한 조건에 맞는 주문이 없습니다. (표 머리 아래 &apos;필터 해제&apos;를 누르면 전체가 다시 보입니다)
+                      </TableCell>
+                    </TableRow>
+                  )}
                 </TableBody>
               </Table>
             </div>
@@ -1404,7 +1600,7 @@ export default function OrdersPage() {
                 ? `${selectedMonth.slice(0, 4)}년 ${selectedMonth.slice(5, 7)}월 이후 주문 목록` 
                 : `${selectedMonth.slice(0, 4)}년 ${selectedMonth.slice(5, 7)}월 주문 목록`}
               <span className="ml-2 text-xs text-gray-500">
-                (총 {orders.length}건)
+                (총 {orders.length}건{listFilterActive ? ` 중 ${sortedOrders.length}건 표시` : ''})
               </span>
             </CardTitle>
             
@@ -1501,11 +1697,46 @@ export default function OrdersPage() {
                       지점명
                       <SortIcon field="branchName" currentField={sortField} direction={sortDirection} />
                     </TableHead>
-                    <TableHead className="w-28 text-center py-0.5 px-0.5">하차지</TableHead>
+                    <TableHead 
+                      className="w-28 text-center py-0.5 px-0.5 cursor-pointer hover:bg-gray-100"
+                      onClick={() => handleSort('destination')}
+                    >
+                      하차지
+                      <SortIcon field="destination" currentField={sortField} direction={sortDirection} />
+                    </TableHead>
                     <TableHead className="w-32 text-center py-0.5 px-0.5">메모</TableHead>
-                    <TableHead className="w-32 text-center py-0.5 px-0.5">품목</TableHead>
+                    <TableHead 
+                      className="w-32 text-center py-0.5 px-0.5 cursor-pointer hover:bg-gray-100"
+                      onClick={() => handleSort('itemName')}
+                    >
+                      품목
+                      <SortIcon field="itemName" currentField={sortField} direction={sortDirection} />
+                    </TableHead>
                     <TableHead className="w-20 text-center py-0.5 px-0.5">수량</TableHead>
                     <TableHead className="w-20 text-center py-0.5 px-0.5">관리</TableHead>
+                  </TableRow>
+                  <TableRow className="bg-gray-50 hover:bg-gray-50">
+                    <TableHead className="h-8 py-0.5 px-0.5" />
+                    <TableHead className="h-8 py-0.5 px-0.5" />
+                    <TableHead className="h-8 py-0.5 px-0.5" />
+                    <TableHead className="h-8 py-0.5 px-0.5">
+                      <ColumnFilterSelect label="지점명" value={listFilter.branch} options={listFilterOptions.branches} onChange={(v) => setListFilter((f) => ({ ...f, branch: v }))} />
+                    </TableHead>
+                    <TableHead className="h-8 py-0.5 px-0.5">
+                      <ColumnFilterCombo label="하차지" listId="list-destination-options" value={listFilter.destination} options={listFilterOptions.destinations} onChange={(v) => setListFilter((f) => ({ ...f, destination: v }))} />
+                    </TableHead>
+                    <TableHead className="h-8 py-0.5 px-0.5" />
+                    <TableHead className="h-8 py-0.5 px-0.5">
+                      <ColumnFilterSelect label="품목" colorize value={listFilter.item} options={listFilterOptions.items} onChange={(v) => setListFilter((f) => ({ ...f, item: v }))} />
+                    </TableHead>
+                    <TableHead className="h-8 py-0.5 px-0.5" />
+                    <TableHead className="h-8 py-0.5 px-0.5 text-center">
+                      {listFilterActive && (
+                        <button type="button" onClick={() => setListFilter(EMPTY_FILTER)} className="text-xs text-blue-700 underline">
+                          필터 해제
+                        </button>
+                      )}
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1557,6 +1788,13 @@ export default function OrdersPage() {
                           </TableCell>
                         </TableRow>
                   ))}
+                  {sortedOrders.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={9} className="text-center py-4 text-sm text-gray-500">
+                        선택한 조건에 맞는 주문이 없습니다. (표 머리 아래 &apos;필터 해제&apos;를 누르면 전체가 다시 보입니다)
+                      </TableCell>
+                    </TableRow>
+                  )}
                 </TableBody>
               </Table>
             </div>
