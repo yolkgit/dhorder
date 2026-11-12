@@ -420,9 +420,9 @@ const OrderAnalyticsTable = ({ orders }: { orders: any[] }) => {
 };
 
 // ===== 열 필터(지점명·하차지·품목 중 특정 항목 선택) / 텍스트 열 정렬 =====
-type ColumnFilter = { branch: string; destination: string; item: string };
+type ColumnFilter = { branch: string; destination: string; destinationContains: boolean; item: string };
 type FilterOption = { value: string; count: number };
-const EMPTY_FILTER: ColumnFilter = { branch: '', destination: '', item: '' };
+const EMPTY_FILTER: ColumnFilter = { branch: '', destination: '', destinationContains: false, item: '' };
 
 const getBranchLabel = (order: any): string => order?.user?.branchName || order?.user?.name || '정보 없음';
 const getOrderItemNames = (order: any): string[] =>
@@ -435,7 +435,10 @@ const isFilterActive = (f: ColumnFilter) => !!(f.branch || f.destination.trim() 
 
 const matchesFilter = (order: any, f: ColumnFilter) =>
   (!f.branch || getBranchLabel(order) === f.branch) &&
-  (!f.destination.trim() || getDestinationLabel(order).toLowerCase().includes(f.destination.trim().toLowerCase())) &&
+  (!f.destination.trim() ||
+    (f.destinationContains
+      ? getDestinationLabel(order).toLowerCase().includes(f.destination.trim().toLowerCase())
+      : getDestinationLabel(order) === f.destination.trim())) &&
   (!f.item || getOrderItemNames(order).includes(f.item));
 
 const countOptions = (values: string[]): FilterOption[] => {
@@ -466,80 +469,170 @@ const compareByText = (
   return direction === 'asc' ? r : -r;
 };
 
-// 열 머리 아래의 '특정 항목 선택' 상자
-const ColumnFilterSelect = ({
+// 열 머리의 ▼ 버튼과, 누르면 나오는 항목 선택 목록
+const FilterTrigger = ({
   label,
   value,
+  active,
   options,
-  onChange,
+  onSelect,
+  onSelectContains,
   colorize,
+  searchable,
 }: {
   label: string;
   value: string;
+  active: boolean;
   options: FilterOption[];
-  onChange: (value: string) => void;
+  onSelect: (value: string) => void;
+  onSelectContains?: (text: string) => void;
   colorize?: boolean;
+  searchable?: boolean;
 }) => {
-  // 선택해 둔 항목이 데이터에서 사라져도 상자에는 계속 보이도록 유지
-  const shown = value && !options.some((o) => o.value === value) ? [...options, { value, count: 0 }] : options;
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState({ top: 0, left: 0 });
+  const [query, setQuery] = useState('');
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  // 바깥을 누르거나 Esc, 화면 스크롤·크기 변경 시 닫기 (목록 안쪽 스크롤은 제외)
+  useEffect(() => {
+    if (!open) return;
+    const inside = (t: EventTarget | null) =>
+      t instanceof Node && (!!panelRef.current?.contains(t) || !!btnRef.current?.contains(t));
+    const onDown = (e: MouseEvent) => { if (!inside(e.target)) setOpen(false); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    const onMove = (e: Event) => { if (!inside(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    window.addEventListener('resize', onMove);
+    window.addEventListener('scroll', onMove, true);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+      window.removeEventListener('resize', onMove);
+      window.removeEventListener('scroll', onMove, true);
+    };
+  }, [open]);
+
+  const toggle = (e: React.MouseEvent) => {
+    e.stopPropagation(); // 열 머리 클릭(정렬)과 구분
+    if (open) { setOpen(false); return; }
+    const r = btnRef.current?.getBoundingClientRect();
+    if (r) setPos({ top: r.bottom + 4, left: Math.max(4, Math.min(r.left, window.innerWidth - 256)) });
+    setQuery('');
+    setOpen(true);
+  };
+
+  const q = query.trim().toLowerCase();
+  const shown = (() => {
+    const base = value && !options.some((o) => o.value === value) ? [...options, { value, count: 0 }] : options;
+    return q ? base.filter((o) => o.value.toLowerCase().includes(q)) : base;
+  })();
+  const pick = (v: string) => { onSelect(v); setOpen(false); };
+
   return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      onClick={(e) => e.stopPropagation()}
-      title={`${label} 선택`}
-      aria-label={`${label} 선택`}
-      className={`w-full min-w-0 h-6 text-xs rounded border px-0.5 font-normal ${
-        value ? 'bg-yellow-100 border-yellow-400 font-semibold' : 'bg-white border-gray-300'
-      } ${colorize ? getItemTextClass(value) : ''}`}
-    >
-      <option value="">전체</option>
-      {shown.map((o) => (
-        <option key={o.value} value={o.value} className={colorize ? getItemTextClass(o.value) : ''}>
-          {o.value} ({o.count})
-        </option>
-      ))}
-    </select>
+    <>
+      <button
+        type="button"
+        ref={btnRef}
+        onClick={toggle}
+        title={`${label} 항목 선택`}
+        aria-label={`${label} 항목 선택`}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        className={`ml-0.5 inline-flex h-4 w-4 items-center justify-center rounded align-middle text-[10px] leading-none ${
+          active ? 'bg-yellow-300 font-bold text-yellow-900' : 'text-gray-400 hover:bg-gray-200 hover:text-gray-700'
+        }`}
+      >
+        ▼
+      </button>
+      {open && (
+        <div
+          ref={panelRef}
+          style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 50 }}
+          className="flex max-h-80 w-60 flex-col rounded-md border border-gray-300 bg-white text-left text-sm font-normal text-gray-900 shadow-lg"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {searchable && (
+            <input
+              autoFocus
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={`${label} 검색`}
+              className="m-1 h-7 rounded border border-gray-300 px-2 text-xs"
+            />
+          )}
+          <ul className="overflow-y-auto py-0.5">
+            <li>
+              <button
+                type="button"
+                onClick={() => pick('')}
+                className={`w-full px-2 py-1 text-left hover:bg-gray-100 ${!value ? 'bg-yellow-100 font-semibold' : ''}`}
+              >
+                전체
+              </button>
+            </li>
+            {q && onSelectContains && shown.length > 0 && (
+              <li>
+                <button
+                  type="button"
+                  onClick={() => { onSelectContains(query.trim()); setOpen(false); }}
+                  className="w-full bg-blue-50 px-2 py-1 text-left text-blue-800 hover:bg-blue-100"
+                >
+                  &quot;{query.trim()}&quot; 포함 모두 보기 ({shown.reduce((sum, o) => sum + o.count, 0)}건)
+                </button>
+              </li>
+            )}
+            {shown.map((o) => (
+              <li key={o.value}>
+                <button
+                  type="button"
+                  onClick={() => pick(o.value)}
+                  className={`w-full px-2 py-1 text-left hover:bg-gray-100 ${
+                    value === o.value ? 'bg-yellow-100 font-semibold' : ''
+                  } ${colorize ? getItemTextClass(o.value) : ''}`}
+                >
+                  {o.value} <span className="text-xs text-gray-400">({o.count})</span>
+                </button>
+              </li>
+            ))}
+            {shown.length === 0 && <li className="px-2 py-1 text-xs text-gray-500">일치하는 항목이 없습니다</li>}
+          </ul>
+        </div>
+      )}
+    </>
   );
 };
 
-// 하차지처럼 항목이 많은 열: 글자를 입력해 좁히거나 목록에서 선택 (입력한 글자가 포함된 하차지를 모두 표시)
-const ColumnFilterCombo = ({
-  label,
-  value,
-  options,
-  onChange,
-  listId,
-}: {
-  label: string;
-  value: string;
-  options: FilterOption[];
-  onChange: (value: string) => void;
-  listId: string;
-}) => (
-  <>
-    <input
-      type="text"
-      list={listId}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      onClick={(e) => e.stopPropagation()}
-      placeholder="전체"
-      title={`${label}: 글자를 입력하거나 목록에서 선택`}
-      aria-label={`${label} 선택`}
-      className={`w-full min-w-0 h-6 text-xs rounded border px-1 font-normal ${
-        value.trim() ? 'bg-yellow-100 border-yellow-400 font-semibold' : 'bg-white border-gray-300'
-      }`}
-    />
-    <datalist id={listId}>
-      {options.map((o) => (
-        <option key={o.value} value={o.value}>
-          {o.count}건
-        </option>
-      ))}
-    </datalist>
-  </>
-);
+// 필터가 걸려 있을 때 카드 제목 아래에 보이는 안내와 해제 버튼
+const ActiveFilterChips = ({ filter, onChange }: { filter: ColumnFilter; onChange: (f: ColumnFilter) => void }) => {
+  if (!isFilterActive(filter)) return null;
+  const chip = (text: string, onClear: () => void) => (
+    <span key={text} className="inline-flex items-center gap-1 rounded border border-yellow-400 bg-yellow-100 px-1.5 py-0.5">
+      {text}
+      <button type="button" onClick={onClear} className="font-bold text-yellow-900 hover:text-red-600" aria-label={`${text} 해제`}>
+        ✕
+      </button>
+    </span>
+  );
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-1 text-xs">
+      <span className="text-gray-500">필터 적용 중:</span>
+      {filter.branch && chip(`지점명 ${filter.branch}`, () => onChange({ ...filter, branch: '' }))}
+      {filter.destination.trim() &&
+        chip(
+          `하차지 ${filter.destination.trim()}${filter.destinationContains ? ' 포함' : ''}`,
+          () => onChange({ ...filter, destination: '', destinationContains: false })
+        )}
+      {filter.item && chip(`품목 ${filter.item}`, () => onChange({ ...filter, item: '' }))}
+      <button type="button" onClick={() => onChange(EMPTY_FILTER)} className="ml-1 text-blue-700 underline">
+        모두 해제
+      </button>
+    </div>
+  );
+};
 
 export default function OrdersPage() {
   const router = useRouter();
@@ -1437,6 +1530,7 @@ export default function OrdersPage() {
               (총 {currentAndFutureOrders.length}건{todayFilterActive ? ` 중 ${sortedCurrentAndFutureOrders.length}건 표시` : ''})
             </span>
           </CardTitle>
+          <ActiveFilterChips filter={todayFilter} onChange={setTodayFilter} />
         </CardHeader>
         <CardContent className="p-0">
           {isTodayLoading ? (
@@ -1469,6 +1563,7 @@ export default function OrdersPage() {
                     >
                       지점명
                       <SortIcon field="branchName" currentField={todayOrdersSortField} direction={todayOrdersSortDirection} />
+                      <FilterTrigger label="지점명" value={todayFilter.branch} active={!!todayFilter.branch} options={todayFilterOptions.branches} onSelect={(v) => setTodayFilter((x) => ({ ...x, branch: v }))} />
                     </TableHead>
                     <TableHead 
                       className="w-28 text-center py-0.5 px-0.5 cursor-pointer hover:bg-gray-100"
@@ -1476,6 +1571,7 @@ export default function OrdersPage() {
                     >
                       하차지
                       <SortIcon field="destination" currentField={todayOrdersSortField} direction={todayOrdersSortDirection} />
+                      <FilterTrigger label="하차지" searchable value={todayFilter.destination} active={!!todayFilter.destination.trim()} options={todayFilterOptions.destinations} onSelect={(v) => setTodayFilter((x) => ({ ...x, destination: v, destinationContains: false }))} onSelectContains={(v) => setTodayFilter((x) => ({ ...x, destination: v, destinationContains: true }))} />
                     </TableHead>
                     <TableHead className="w-32 text-center py-0.5 px-0.5">메모</TableHead>
                     <TableHead 
@@ -1484,32 +1580,10 @@ export default function OrdersPage() {
                     >
                       품목
                       <SortIcon field="itemName" currentField={todayOrdersSortField} direction={todayOrdersSortDirection} />
+                      <FilterTrigger label="품목" colorize value={todayFilter.item} active={!!todayFilter.item} options={todayFilterOptions.items} onSelect={(v) => setTodayFilter((x) => ({ ...x, item: v }))} />
                     </TableHead>
                     <TableHead className="w-20 text-center py-0.5 px-0.5">수량</TableHead>
                     <TableHead className="w-20 text-center py-0.5 px-0.5">관리</TableHead>
-                  </TableRow>
-                  <TableRow className="bg-gray-50 hover:bg-gray-50">
-                    <TableHead className="h-8 py-0.5 px-0.5" />
-                    <TableHead className="h-8 py-0.5 px-0.5" />
-                    <TableHead className="h-8 py-0.5 px-0.5" />
-                    <TableHead className="h-8 py-0.5 px-0.5">
-                      <ColumnFilterSelect label="지점명" value={todayFilter.branch} options={todayFilterOptions.branches} onChange={(v) => setTodayFilter((f) => ({ ...f, branch: v }))} />
-                    </TableHead>
-                    <TableHead className="h-8 py-0.5 px-0.5">
-                      <ColumnFilterCombo label="하차지" listId="today-destination-options" value={todayFilter.destination} options={todayFilterOptions.destinations} onChange={(v) => setTodayFilter((f) => ({ ...f, destination: v }))} />
-                    </TableHead>
-                    <TableHead className="h-8 py-0.5 px-0.5" />
-                    <TableHead className="h-8 py-0.5 px-0.5">
-                      <ColumnFilterSelect label="품목" colorize value={todayFilter.item} options={todayFilterOptions.items} onChange={(v) => setTodayFilter((f) => ({ ...f, item: v }))} />
-                    </TableHead>
-                    <TableHead className="h-8 py-0.5 px-0.5" />
-                    <TableHead className="h-8 py-0.5 px-0.5 text-center">
-                      {todayFilterActive && (
-                        <button type="button" onClick={() => setTodayFilter(EMPTY_FILTER)} className="text-xs text-blue-700 underline">
-                          필터 해제
-                        </button>
-                      )}
-                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1574,7 +1648,7 @@ export default function OrdersPage() {
                   {sortedCurrentAndFutureOrders.length === 0 && (
                     <TableRow>
                       <TableCell colSpan={9} className="text-center py-4 text-sm text-gray-500">
-                        선택한 조건에 맞는 주문이 없습니다. (표 머리 아래 &apos;필터 해제&apos;를 누르면 전체가 다시 보입니다)
+                        선택한 조건에 맞는 주문이 없습니다. (위의 &apos;모두 해제&apos;를 누르면 전체가 다시 보입니다)
                       </TableCell>
                     </TableRow>
                   )}
@@ -1664,6 +1738,7 @@ export default function OrdersPage() {
         </div>
             )}
       </div>
+          <ActiveFilterChips filter={listFilter} onChange={setListFilter} />
         </CardHeader>
         <CardContent className="p-0">
           {isLoading ? (
@@ -1696,6 +1771,7 @@ export default function OrdersPage() {
                     >
                       지점명
                       <SortIcon field="branchName" currentField={sortField} direction={sortDirection} />
+                      <FilterTrigger label="지점명" value={listFilter.branch} active={!!listFilter.branch} options={listFilterOptions.branches} onSelect={(v) => setListFilter((x) => ({ ...x, branch: v }))} />
                     </TableHead>
                     <TableHead 
                       className="w-28 text-center py-0.5 px-0.5 cursor-pointer hover:bg-gray-100"
@@ -1703,6 +1779,7 @@ export default function OrdersPage() {
                     >
                       하차지
                       <SortIcon field="destination" currentField={sortField} direction={sortDirection} />
+                      <FilterTrigger label="하차지" searchable value={listFilter.destination} active={!!listFilter.destination.trim()} options={listFilterOptions.destinations} onSelect={(v) => setListFilter((x) => ({ ...x, destination: v, destinationContains: false }))} onSelectContains={(v) => setListFilter((x) => ({ ...x, destination: v, destinationContains: true }))} />
                     </TableHead>
                     <TableHead className="w-32 text-center py-0.5 px-0.5">메모</TableHead>
                     <TableHead 
@@ -1711,32 +1788,10 @@ export default function OrdersPage() {
                     >
                       품목
                       <SortIcon field="itemName" currentField={sortField} direction={sortDirection} />
+                      <FilterTrigger label="품목" colorize value={listFilter.item} active={!!listFilter.item} options={listFilterOptions.items} onSelect={(v) => setListFilter((x) => ({ ...x, item: v }))} />
                     </TableHead>
                     <TableHead className="w-20 text-center py-0.5 px-0.5">수량</TableHead>
                     <TableHead className="w-20 text-center py-0.5 px-0.5">관리</TableHead>
-                  </TableRow>
-                  <TableRow className="bg-gray-50 hover:bg-gray-50">
-                    <TableHead className="h-8 py-0.5 px-0.5" />
-                    <TableHead className="h-8 py-0.5 px-0.5" />
-                    <TableHead className="h-8 py-0.5 px-0.5" />
-                    <TableHead className="h-8 py-0.5 px-0.5">
-                      <ColumnFilterSelect label="지점명" value={listFilter.branch} options={listFilterOptions.branches} onChange={(v) => setListFilter((f) => ({ ...f, branch: v }))} />
-                    </TableHead>
-                    <TableHead className="h-8 py-0.5 px-0.5">
-                      <ColumnFilterCombo label="하차지" listId="list-destination-options" value={listFilter.destination} options={listFilterOptions.destinations} onChange={(v) => setListFilter((f) => ({ ...f, destination: v }))} />
-                    </TableHead>
-                    <TableHead className="h-8 py-0.5 px-0.5" />
-                    <TableHead className="h-8 py-0.5 px-0.5">
-                      <ColumnFilterSelect label="품목" colorize value={listFilter.item} options={listFilterOptions.items} onChange={(v) => setListFilter((f) => ({ ...f, item: v }))} />
-                    </TableHead>
-                    <TableHead className="h-8 py-0.5 px-0.5" />
-                    <TableHead className="h-8 py-0.5 px-0.5 text-center">
-                      {listFilterActive && (
-                        <button type="button" onClick={() => setListFilter(EMPTY_FILTER)} className="text-xs text-blue-700 underline">
-                          필터 해제
-                        </button>
-                      )}
-                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1791,7 +1846,7 @@ export default function OrdersPage() {
                   {sortedOrders.length === 0 && (
                     <TableRow>
                       <TableCell colSpan={9} className="text-center py-4 text-sm text-gray-500">
-                        선택한 조건에 맞는 주문이 없습니다. (표 머리 아래 &apos;필터 해제&apos;를 누르면 전체가 다시 보입니다)
+                        선택한 조건에 맞는 주문이 없습니다. (위의 &apos;모두 해제&apos;를 누르면 전체가 다시 보입니다)
                       </TableCell>
                     </TableRow>
                   )}
