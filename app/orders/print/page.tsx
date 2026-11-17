@@ -117,7 +117,7 @@ const CSS = `
 .inv-rows { flex:1; min-height:0; margin-top:0.6mm; }
 .inv-row { display:flex; align-items:center; border-left:1.8mm solid #111; padding-left:2mm; border-bottom:0.2mm solid #bbb; box-sizing:border-box; overflow:hidden; }
 .inv-photo { flex:none; border:0.3mm solid #999; border-radius:0.8mm; overflow:hidden; background:#f1f1f1; display:flex; align-items:center; justify-content:center; }
-.inv-photo img { width:100%; height:100%; object-fit:cover; }
+.inv-photo img { width:100%; height:100%; object-fit:contain; }
 .inv-nophoto { font-size:6.5pt; color:#777; text-align:center; line-height:1.1; }
 .inv-iname { font-weight:900; line-height:1.2; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
 .inv-row.compact .inv-iname { flex:1; min-width:0; padding:0 1.5mm; }

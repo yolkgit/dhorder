@@ -720,7 +720,7 @@ export default function AdminPage() {
                                   <img
                                     src={`/item-image/${item.id}?v=${item.imageVersion}`}
                                     alt={item.name}
-                                    className="h-12 w-12 rounded border object-cover"
+                                    className="h-12 w-12 rounded border bg-gray-50 object-contain"
                                   />
                                 </a>
                               ) : (
