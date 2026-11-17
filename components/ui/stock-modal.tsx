@@ -125,7 +125,7 @@ export function StockModal() {
                   <div className="flex aspect-square items-center justify-center overflow-hidden bg-gray-100">
                     {it.imageUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={it.imageUrl} alt={it.name} loading="lazy" className="h-full w-full object-cover" />
+                      <img src={it.imageUrl} alt={it.name} loading="lazy" className="h-full w-full object-contain" />
                     ) : (
                       <Package className="h-8 w-8 text-gray-300" />
                     )}
